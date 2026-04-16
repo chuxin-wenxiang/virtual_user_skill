@@ -1,0 +1,10 @@
+# 数据目录
+
+此目录用于存放：
+- scenario_library.json.enc（加密的场景库数据）
+- scenario_embeddings.npy（预计算的向量）
+
+注意：
+1. 这些文件不会提交到 Git（见 .gitignore）
+2. 部署时需要运行 scripts/prepare_data.py 生成
+3. 密钥文件保存在 ~/.virtual_user/.key（不提交到 Git）
