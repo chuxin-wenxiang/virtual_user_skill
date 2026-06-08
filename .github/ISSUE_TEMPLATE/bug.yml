@@ -1,0 +1,23 @@
+name: 🐛 Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Include error messages or stack traces if any.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: |
+        1. Run command `...`
+        2. Observe `...`
+  - type: input
+    id: env
+    attributes:
+      label: Python version & OS
+      placeholder: e.g., Python 3.11 on macOS 14.5

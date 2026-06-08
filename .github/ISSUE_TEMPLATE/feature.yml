@@ -1,0 +1,27 @@
+name: 💡 Feature request
+description: Suggest an improvement or new use case
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: What's the use case?
+      description: What user research problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How would the feature work?
+      description: A brief sketch of expected behavior, inputs/outputs, or UI.
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain
+      options:
+        - travel
+        - e-commerce
+        - fintech
+        - SaaS
+        - healthcare
+        - other
