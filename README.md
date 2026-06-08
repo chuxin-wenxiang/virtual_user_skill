@@ -1,131 +1,152 @@
-# 虚拟用户 Skill（场景库版）
+# virtual_user_skill
 
-> 🎭 基于真实用户场景库的虚拟用户对话生成工具
+> **AI virtual users powered by 54k+ real, anonymized user-research scenarios.**
+> Stop interviewing prompt-engineered personas. Start talking to ones built from actual data.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/your-username/virtual-user-skill)
-[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://python.org)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
+[![Scenarios](https://img.shields.io/badge/scenarios-54%2C631-orange.svg)](#data)
+[![GitHub stars](https://img.shields.io/github/stars/chuxin-wenxiang/virtual_user_skill?style=social)](https://github.com/chuxin-wenxiang/virtual_user_skill/stargazers)
 
 ---
 
-## 🌟 快速开始
+## Why this exists
 
-### 1. 安装依赖
+Most "AI user research" tools today are GPT pretending to be five different people. The personas all talk the same, agree too easily, and never bring up the things you didn't already know to ask about.
+
+This project takes a different route: **vector-search over 54,631 real, anonymized user scenarios** (collected from years of travel-app user research), then lets an LLM generate distinct virtual users grounded in that retrieved data. The result feels closer to interviewing actual humans — they contradict themselves, surface unexpected pain points, and disagree with you when warranted.
+
+---
+
+## Demo
+
+![demo](docs/demo.gif)
+
+> 30-second walkthrough: ask a product question → get 8 distinct user types built from real research → pick which to interview in depth.
+
+---
+
+## Quick start (3 steps)
 
 ```bash
+# 1. Clone and set up
+git clone https://github.com/chuxin-wenxiang/virtual_user_skill.git
 cd virtual_user_skill
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-```
 
-### 2. 初始化密钥
-
-```bash
+# 2. Initialize encryption key for the bundled scenario library
 python src/encrypt.py
+
+# 3. Ask your first question
+python src/main.py "What do users care about most when booking a flight?"
 ```
 
-首次运行会自动生成加密密钥并保存在 `~/.virtual_user/.key`
-
-### 3. 准备场景库数据
-
-```bash
-# 将你的 Excel 数据转换为加密格式
-python scripts/prepare_data.py your_data.xlsx
-```
-
-### 4. 运行技能
-
-```bash
-# 基本用法
-python src/main.py "用户预订机票时最关心什么？"
-
-# 自动选择前 3 个用户类型
-python src/main.py "用户预订机票时最关心什么？" --auto
-```
+You'll get 8-10 user types back. Pick which to converse with, and the tool runs a multi-turn interview against each.
 
 ---
 
-## 📖 完整文档
+## Use cases
 
-详细使用说明请查看 [SKILL.md](SKILL.md)
-
----
-
-## 🎯 功能特性
-
-- ✅ **真实场景驱动** - 基于 1859+ 条真实用户研究数据
-- ✅ **智能检索** - 向量化搜索最相关场景
-- ✅ **多样化生成** - 自动生成 10 个虚拟用户类型
-- ✅ **灵活选择** - 支持手动选择/反选用户类型
-- ✅ **多轮对话** - 深度访谈和产品测评
-- ✅ **报告输出** - 自动生成 Markdown 报告
-- ✅ **数据加密** - 场景库加密存储，保护隐私
+| Mode | When to use | What you get |
+|---|---|---|
+| **Exploration** | "What's the user landscape for X?" | 8-10 distinct user types with backgrounds, pain points, emotions |
+| **PMF check** | "Does this need actually exist?" | Stress-test your hypothesis against retrieved scenarios |
+| **PRD review** | "Will users actually use this?" | Multi-user critique on a spec, including dissent |
+| **Design crit** | "What would real users miss?" | Adversarial feedback grounded in past complaints |
 
 ---
 
-## 🔧 配置
-
-编辑 `config.yaml` 自定义技能行为：
-
-```yaml
-defaults:
-  user_types_count: 10      # 生成的用户类型数量
-  auto_select_count: 3      # 自动选择的数量
-  search_top_k: 20          # 搜索场景数量
-```
-
----
-
-## 📁 项目结构
+## How it works
 
 ```
-virtual_user_skill/
-├── src/                    # 源代码
-├── data/                   # 数据文件（加密）
-├── scripts/                # 工具脚本
-├── examples/               # 使用示例
-├── tests/                  # 单元测试
-├── SKILL.md               # 技能文档
-├── README.md              # 本文件
-├── config.yaml            # 配置文件
-└── requirements.txt       # 依赖
+Your question
+    ↓
+[1] Vector search over 54,631 anonymized scenarios
+    ↓
+[2] Top-k retrieved scenarios → cluster into distinct user archetypes
+    ↓
+[3] LLM generates fully-fleshed virtual users with names, backgrounds, pain points, emotions
+    ↓
+[4] You pick one or more → multi-turn dialogue
+    ↓
+[5] Auto-generated insight report (Markdown)
 ```
+
+- **Retrieval**: 768-dim `text2vec-base-chinese` embeddings, pre-computed
+- **Storage**: Fernet-encrypted scenario library (privacy by default)
+- **Generation**: pluggable LLM (defaults to GPT-4-class via OpenAI-compatible API)
 
 ---
 
-## 💡 使用场景
+## Data
 
-### 1. 用户访谈
-```bash
-python src/main.py "用户对机票预订流程有什么痛点？"
-```
+The bundled `scenario_library.json.enc` contains 54,631 anonymized user research scenarios across 13 fields:
 
-### 2. 产品测评
-```bash
-python src/main.py "评估这个新的退改签方案"
-```
+`user_name | user_background | content_scope | is_outbound_travel | scenario | task | expected_outcome | current_solution | delight_points | pain_points | improvement_directions | underlying_needs | emotion_tags`
 
-### 3. 需求验证
-```bash
-python src/main.py "用户是否需要动态规划提醒功能？"
-```
+All personally identifiable information has been stripped. The data is encrypted at rest with a key generated locally on first run (`~/.virtual_user/.key`) — never shared, never uploaded.
+
+A small **sample of 50 anonymized scenarios** ships unencrypted in `data/sample_scenarios.json` so you can inspect the structure before running anything.
 
 ---
 
-## 🔒 数据安全
+## Comparison
 
-场景库数据使用 Fernet 对称加密：
-- 密钥保存在 `~/.virtual_user/.key`（不提交到 Git）
-- 加密数据文件可安全提交到 GitHub
-- 运行时自动解密，不暴露原始数据
-
----
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
+| Approach | Realism | Diversity | Bias risk | Setup |
+|---|---|---|---|---|
+| Prompt-engineered persona | Low | Low (LLM convergence) | High | Free, fast |
+| Real interviews | High | Medium | Low | Slow, expensive |
+| **virtual_user_skill** | Medium-High | **High (data-driven)** | **Low (real voices)** | One-time setup |
 
 ---
 
-## 📄 许可证
+## FAQ
 
-MIT License
+**Is this a replacement for real user interviews?**
+No. It's a fast first-pass screen — best for stress-testing ideas before committing to recruitment. Real interviews still win for novel domains.
+
+**Can I use my own data instead?**
+Yes. `scripts/prepare_data.py your_data.xlsx` ingests any spreadsheet matching the 13-field schema.
+
+**What languages does it support?**
+The bundled data is Chinese travel-app scenarios. Embeddings are Chinese-tuned. English/multilingual support is on the roadmap (PRs welcome).
+
+**Is the data really anonymized?**
+Yes. All names, locations, dates, and identifiers were replaced or removed before encryption. The repo is licensed MIT specifically because the data is safe to share.
+
+---
+
+## Roadmap
+
+- [ ] English scenario library
+- [ ] CLI mode for CI integration
+- [ ] Web UI (Streamlit)
+- [ ] Cross-domain transfer (e-commerce, fintech, SaaS)
+- [ ] Compare-with-real-users evaluation framework
+
+Open an [issue](https://github.com/chuxin-wenxiang/virtual_user_skill/issues) to vote or propose.
+
+---
+
+## Contributing
+
+Contributions welcome — especially:
+- Domain-specific scenario libraries (e-commerce, fintech, etc.)
+- Multilingual embeddings
+- New use case templates
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (TODO) for details.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+If this saves you research time, a ⭐ helps a lot. Thanks for reading.
+
+
+---
+
+[中文版 / Chinese version](./README_zh.md)
