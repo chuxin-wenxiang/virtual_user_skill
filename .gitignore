@@ -26,8 +26,8 @@ wheels/
 # 虚拟用户 Skill 特定
 data/*.enc
 data/*.npy
-data/sample_*.json
 data/*.json
+!data/sample_scenarios.json
 outputs/
 *.log
 
