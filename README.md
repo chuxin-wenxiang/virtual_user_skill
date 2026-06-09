@@ -20,9 +20,9 @@ This project takes a different route: **vector-search over 54,631 real, anonymiz
 
 ## Demo
 
-![demo](docs/demo.gif)
+![demo](docs/assets/demo_terminal.png)
 
-> 30-second walkthrough: ask a product question → get 8 distinct user types built from real research → pick which to interview in depth.
+> Ask a product question in natural language → retrieve matching real-world scenarios → ground your AI personas in actual data.
 
 ---
 
