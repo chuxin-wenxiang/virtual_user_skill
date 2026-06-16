@@ -1,45 +1,111 @@
-# 虚拟用户 Skill 配置
+# Virtual User Skill Configuration v2.0
 
 skill:
   name: virtual_user_skill
-  version: 1.0.0
-  description: 基于场景库的虚拟用户对话技能
-  author: 飞猪用研团队
+  version: 2.0.0
+  description: "AI User Research System - 5 modes covering full product lifecycle"
+  author: "Fliggy UXR Team"
 
-# 触发词配置
-triggers:
-  primary:
-    - 虚拟用户
-    - 用户访谈
-    - 用户测评
-    - 用户画像生成
-  secondary:
-    - 场景库
-    - 用户类型
-    - 用户对话
-    - 产品测评
+# Mode configurations
+modes:
+  explore:
+    description: "1v1 deep interview with virtual user persona"
+    default_sample: 1
+    min_sample: 1
+    max_sample: 1
+    search_top_k: 20
+    persona_count: 10
 
-# 默认配置
-defaults:
-  # 生成的用户类型数量
-  user_types_count: 10
-  # 自动选择的数量（如果启用 auto_select）
-  auto_select_count: 3
-  # 搜索场景数量
-  search_top_k: 20
+  debate:
+    description: "Structured pro vs con debate"
+    default_rounds: 3
+    min_rounds: 1
+    max_rounds: 5
+    search_top_k: 20
 
-# 数据配置
+  pmf:
+    description: "PMF validation with Sean Ellis disappointment scale"
+    default_sample: 20
+    min_sample: 8
+    max_sample: 200
+    pass_threshold: 0.40
+    dissenter_count: 3
+    search_top_k: 50
+    effective_rate: 0.85
+
+  prd:
+    description: "PRD calibration with 4-dimension scoring"
+    default_sample: 20
+    min_sample: 8
+    max_sample: 200
+    dimensions:
+      need_fit: 0.30
+      experience_clarity: 0.25
+      potential_impact: 0.25
+      priority_urgency: 0.20
+    da_threshold_sd: 1.0
+    da_threshold_agreement: 0.80
+    search_top_k: 50
+    effective_rate: 0.72
+
+  metrics:
+    description: "Pre-launch business metric estimation (Juster scale)"
+    default_sample: 50
+    min_sample: 30
+    max_sample: 200
+    intention_weights:
+      definitely: 1.0
+      probably: 0.6
+      not_sure: 0.3
+      probably_not: 0.1
+      definitely_not: 0.0
+    min_segment_size: 5
+    anti_resonance_threshold: 0.80
+    search_top_k: 120
+    effective_rate: 0.72
+
+# Data configuration
 data:
-  # 场景库文件（加密）
   scenario_file: scenario_library.json.enc
-  # 向量文件
   embeddings_file: scenario_embeddings.npy
-  # 向量化模型
   model_name: shibing624/text2vec-base-chinese
+  scenario_count: 54631
+  embedding_dim: 768
 
-# 输出配置
+# Output configuration
 output:
-  # 报告输出目录
   report_dir: outputs
-  # 报告格式
-  format: markdown
+  formats:
+    - html
+    - markdown
+  html_theme: dark  # dark or light
+
+# Trigger keywords
+triggers:
+  explore:
+    - "虚拟用户"
+    - "模拟访谈"
+    - "用户怎么看"
+    - "和用户聊聊"
+    - "用户访谈"
+  debate:
+    - "辩论赛"
+    - "正反方"
+    - "辩一辩"
+    - "debate"
+  pmf:
+    - "PMF验证"
+    - "需求成不成立"
+    - "值不值得做"
+    - "是不是伪需求"
+  prd:
+    - "评估方案"
+    - "排优先级"
+    - "功能排序"
+    - "PRD校准"
+  metrics:
+    - "上线前预估"
+    - "指标投票"
+    - "转化率预估"
+    - "点击率预估"
+    - "留存预估"

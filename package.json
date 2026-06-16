@@ -1,26 +1,36 @@
 {
   "name": "virtual-user-skill",
-  "version": "1.0.0",
-  "description": "基于场景库的虚拟用户对话技能 - 生成虚拟用户类型进行对话访谈和产品测评",
+  "version": "2.0.0",
+  "description": "AI User Research System - 5 working modes covering the full product lifecycle. Based on 140,000+ real user interview records.",
   "main": "src/main.py",
   "scripts": {
     "start": "python src/main.py",
+    "explore": "python src/main.py --mode explore",
+    "debate": "python src/main.py --mode debate",
+    "pmf": "python src/main.py --mode pmf",
+    "prd": "python src/main.py --mode prd",
+    "metrics": "python src/main.py --mode metrics",
     "init": "python src/encrypt.py",
     "prepare-data": "python scripts/prepare_data.py",
     "test": "python -m pytest tests/"
   },
   "keywords": [
     "virtual-user",
-    "user-interview",
-    "scenario-library",
     "user-research",
+    "pmf-validation",
+    "product-market-fit",
+    "user-interview",
+    "prd-calibration",
+    "metrics-voting",
+    "ai-research",
+    "scenario-library",
     "product-testing"
   ],
-  "author": "飞猪用研团队",
+  "author": "Fliggy UXR Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/virtual-user-skill.git"
+    "url": "https://github.com/chuxin-wenxiang/virtual_user_skill.git"
   },
   "dependencies": {
     "python": ">=3.8",

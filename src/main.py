@@ -1,163 +1,300 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-虚拟用户 Skill - 主入口
+Virtual User Skill - Main Entry Point & Mode Router
 
-功能流程：
-1. 用户提问 → 检索场景库
-2. 生成 10 个虚拟用户类型 → 用户选择
-3. 基于选定的用户进行对话
+Five working modes covering the full product lifecycle:
+  1. explore   - 1v1 interview or debate (Idea stage)
+  2. pmf       - PMF validation with Sean Ellis scale
+  3. prd       - PRD calibration with 4-dimension scoring
+  4. metrics   - Pre-launch metrics voting (Juster scale)
+  5. debate    - Structured pro/con debate (alias for explore --debate)
 
-使用方式：
-    python main.py "用户的问题"
+Usage:
+    python main.py --mode explore "What do users think about hotel upgrades?"
+    python main.py --mode pmf "AI room upgrade feature" --sample 20
+    python main.py --mode prd "Design A vs B vs C" --sample 20
+    python main.py --mode metrics "Hotel upgrade" --metrics "click_rate,conversion" --sample 50
+    python main.py --mode debate "Should we add AI recommendations?" --rounds 3
 """
 
 import sys
-import json
+import argparse
 from pathlib import Path
 
-# 添加 src 目录到路径
+# Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent))
-
-from encrypt import EncryptManager
-from vector_search import VectorSearchEngine
-from user_generator import VirtualUserGenerator
-from conversation import ConversationManager
 
 
 class VirtualUserSkill:
-    """虚拟用户技能主类"""
+    """Virtual User Skill - AI User Research System
+    
+    Grounded in 140,000+ real user interview records and 54,000+ scenario entries.
+    Five modes cover Idea → PMF → PRD → Pre-launch estimation.
+    """
+    
+    MODES = {
+        'explore': 'Exploration mode - 1v1 interview with virtual user',
+        'debate': 'Debate mode - Pro vs Con structured debate',
+        'pmf': 'PMF Validation - Sean Ellis disappointment scale',
+        'prd': 'PRD Calibration - 4-dimension scoring + data validation plan',
+        'metrics': 'Metrics Voting - Pre-launch business metric estimation',
+    }
     
     def __init__(self, data_dir=None):
-        """
-        初始化技能
-        
-        Args:
-            data_dir: 数据目录路径
-        """
         self.data_dir = data_dir or (Path(__file__).parent.parent / "data")
-        self.search_engine = VectorSearchEngine(self.data_dir)
-        self.user_generator = VirtualUserGenerator()
-        self.conversation_manager = ConversationManager()
-        self.initialized = False
+        self._search_engine = None
+        self._user_generator = None
     
-    def initialize(self):
-        """初始化技能（加载模型和数据）"""
-        print("🚀 初始化虚拟用户技能...")
-        
-        # 初始化加密管理器（确保密钥存在）
-        encrypt_mgr = EncryptManager()
-        encrypt_mgr.load_or_create_key()
-        
-        # 加载向量化模型
-        self.search_engine.load_model()
-        
-        # 加载场景库数据
-        self.search_engine.load_scenarios()
-        self.search_engine.load_embeddings()
-        
-        self.initialized = True
-        print("✅ 技能初始化完成")
+    @property
+    def search_engine(self):
+        if self._search_engine is None:
+            from vector_search import VectorSearchEngine
+            self._search_engine = VectorSearchEngine(self.data_dir)
+        return self._search_engine
     
-    def run(self, user_question: str, auto_select: bool = False):
+    @property
+    def user_generator(self):
+        if self._user_generator is None:
+            from user_generator import VirtualUserGenerator
+            self._user_generator = VirtualUserGenerator()
+        return self._user_generator
+    
+    def run(self, question: str, mode: str = 'explore', **kwargs):
         """
-        运行技能主流程
+        Main entry point - routes to appropriate mode handler.
         
         Args:
-            user_question: 用户问题
-            auto_select: 是否自动选择前 3 个用户类型（默认 False，需要用户手动选择）
+            question: User's research question or scenario description
+            mode: One of 'explore', 'debate', 'pmf', 'prd', 'metrics'
+            **kwargs: Mode-specific parameters (sample, rounds, metrics, segment_by, etc.)
         
         Returns:
-            dict: 执行结果
+            dict: Mode-specific results
         """
-        if not self.initialized:
-            self.initialize()
+        if mode not in self.MODES:
+            raise ValueError(f"Unknown mode '{mode}'. Available: {list(self.MODES.keys())}")
         
-        print(f"\n❓ 用户问题：{user_question}\n")
+        print(f"\n{'='*60}")
+        print(f"  Virtual User Skill v2.0 - {self.MODES[mode]}")
+        print(f"{'='*60}")
+        print(f"\n  Question: {question}\n")
         
-        # 阶段 1：检索场景库，生成虚拟用户类型
-        print("=" * 60)
-        print("阶段 1: 检索场景库，生成虚拟用户类型")
-        print("=" * 60)
+        # Route to mode handler
+        handler = getattr(self, f'_run_{mode}')
+        return handler(question, **kwargs)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Mode 1: Exploration (1v1 Interview)
+    # ─────────────────────────────────────────────────────────────
+    
+    def _run_explore(self, question: str, **kwargs):
+        """
+        Exploration mode: Generate virtual user personas from scenario library,
+        then conduct 1v1 deep interview.
         
-        scenarios = self.search_engine.search(user_question, top_k=20)
-        user_types = self.user_generator.generate_user_types(scenarios, top_n=10)
+        Flow:
+          1. Vector search → retrieve relevant scenarios
+          2. Generate 8-10 diverse persona types
+          3. User selects personas
+          4. Conduct interview (first-person role-play)
+          5. Generate insights report
+        """
+        from modes.explore import ExploreMode
         
-        print(self.user_generator.format_user_list())
+        mode_handler = ExploreMode(self.search_engine, self.user_generator)
+        return mode_handler.run(question, **kwargs)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Mode 2: Debate (Pro vs Con)
+    # ─────────────────────────────────────────────────────────────
+    
+    def _run_debate(self, question: str, rounds: int = 3, **kwargs):
+        """
+        Debate mode: Two opposing personas debate a topic.
         
-        if auto_select:
-            # 自动选择前 3 个
-            self.user_generator.select_all(selected=False)
-            for i in range(min(3, len(user_types))):
-                self.user_generator.toggle_selection(i + 1, selected=True)
-            print("\n✅ 已自动选择前 3 个用户类型")
-        else:
-            # 等待用户选择
-            print("\n⏳ 等待用户选择...")
-            print("提示：回复'选择 1,3,5'或'反选 2,4'，或'全选'/'取消全选'")
-            # 实际使用时这里会等待用户输入
-            # 现在先自动选择前 3 个作为演示
-            self.user_generator.select_all(selected=False)
-            for i in range(min(3, len(user_types))):
-                self.user_generator.toggle_selection(i + 1, selected=True)
-            print("（演示模式：已自动选择前 3 个）")
+        Args:
+            question: Debate topic
+            rounds: Number of debate rounds (1-5, default 3)
         
-        # 获取选中的用户
-        selected_users = self.user_generator.get_selected_users()
-        print(f"\n✅ 已选择 {len(selected_users)} 个用户类型")
+        Flow:
+          1. Vector search → find relevant scenarios
+          2. Generate Pro persona (supportive) and Con persona (skeptical)
+          3. Structured debate for N rounds
+          4. Synthesis and conclusion
+        """
+        from modes.explore import DebateMode
         
-        # 阶段 3：开始对话
-        print("\n" + "=" * 60)
-        print("阶段 3: 虚拟用户对话")
-        print("=" * 60)
+        mode_handler = DebateMode(self.search_engine, self.user_generator)
+        return mode_handler.run(question, rounds=rounds, **kwargs)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Mode 3: PMF Validation
+    # ─────────────────────────────────────────────────────────────
+    
+    def _run_pmf(self, question: str, sample: int = 20, **kwargs):
+        """
+        PMF Validation mode: Recruit N virtual users for independent evaluation.
         
-        self.conversation_manager.start_session(selected_users)
+        Core question: "If this feature didn't exist, how disappointed would you be?"
         
-        # 对每个选中的用户进行对话
-        for i, user in enumerate(selected_users):
-            print(f"\n🗣️  与 {user['type_name']} 对话：")
-            
-            self.conversation_manager.set_current_user(i)
-            
-            # 生成回复
-            response = self.conversation_manager.generate_user_response(user_question)
-            
-            print(f"   回复：{response['response']}")
-            print(f"   情绪：{response['emotion']}")
+        Sean Ellis Scale:
+          - Very disappointed (3) → Strong PMF signal
+          - Somewhat disappointed (2) → Moderate signal
+          - Not very disappointed (1) → Weak signal
+          - Don't care (0) → No fit
         
-        # 生成报告
-        print("\n" + "=" * 60)
-        print("生成对话报告")
-        print("=" * 60)
+        PMF Score = % "Very disappointed" / Total valid responses
+        Pass threshold: >= 40%
         
-        report = self.conversation_manager.export_report()
+        Args:
+            question: Feature/solution description
+            sample: Target sample size (default 20, min 8)
         
-        return {
-            'success': True,
-            'user_types': selected_users,
-            'conversation_summary': self.conversation_manager.get_conversation_summary(),
-            'report': report,
-            'conversation_history': self.conversation_manager.conversation_history
-        }
+        Returns:
+            dict with: pmf_score, confidence_level, verdict, beneficiary_groups,
+                       improvement_directions, dissenter_feedback
+        """
+        from modes.pmf import PMFValidationMode
+        
+        mode_handler = PMFValidationMode(self.search_engine, self.user_generator)
+        return mode_handler.run(question, sample_size=sample, **kwargs)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Mode 4: PRD Calibration
+    # ─────────────────────────────────────────────────────────────
+    
+    def _run_prd(self, question: str, sample: int = 20, **kwargs):
+        """
+        PRD Calibration mode: N virtual users score solutions on 4 dimensions.
+        
+        Dimensions (weighted):
+          - Need-Fit (30%): Does this solve a real pain point?
+          - Experience Clarity (25%): Can users understand and use it quickly?
+          - Potential Impact (25%): How much does it affect user behavior?
+          - Priority Urgency (20%): How urgent/important do users feel this is?
+        
+        Each dimension scored 1-10, weighted composite calculated.
+        
+        Dual output:
+          1. Scoring report: Feature ranking + experience blind spots + user quotes
+          2. Data validation plan: Tracking events + metrics + analysis framework
+        
+        Args:
+            question: Solution description (can be multiple alternatives)
+            sample: Target sample size (default 20, min 8)
+        """
+        from modes.prd import PRDCalibrationMode
+        
+        mode_handler = PRDCalibrationMode(self.search_engine, self.user_generator)
+        return mode_handler.run(question, sample_size=sample, **kwargs)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Mode 5: Metrics Voting
+    # ─────────────────────────────────────────────────────────────
+    
+    def _run_metrics(self, question: str, sample: int = 50, 
+                     metrics: str = "click_rate", segment_by: str = None, **kwargs):
+        """
+        Metrics Voting mode: Translate user attitudes into business metric estimates.
+        
+        5-point Juster Behavioral Intention Scale:
+          - Definitely will (1.0)
+          - Probably will (0.6)
+          - Not sure (0.3)
+          - Probably won't (0.1)
+          - Definitely won't (0.0)
+        
+        Outputs per metric:
+          1. Estimated percentage (weighted by scale + user segment weights)
+          2. 95% confidence interval (binomial approximation)
+          3. User segment breakdown (e.g., VIP vs regular)
+          4. Top 3 rejection reasons (from "probably won't" + "definitely won't")
+        
+        Args:
+            question: Solution/feature description
+            sample: Target sample size (default 50, min 30)
+            metrics: Comma-separated metric types (click_rate, conversion, retention, etc.)
+            segment_by: Optional segmentation dimension
+        """
+        from modes.metrics import MetricsVotingMode
+        
+        metrics_list = [m.strip() for m in metrics.split(',')]
+        mode_handler = MetricsVotingMode(self.search_engine, self.user_generator)
+        return mode_handler.run(
+            question, 
+            sample_size=sample, 
+            metrics=metrics_list,
+            segment_by=segment_by, 
+            **kwargs
+        )
 
 
 def main():
-    """命令行入口"""
-    if len(sys.argv) < 2:
-        print("用法：python main.py \"用户的问题\"")
-        print("示例：python main.py \"用户预订机票时最关心什么？\"")
-        sys.exit(1)
+    """CLI entry point with argument parsing."""
+    parser = argparse.ArgumentParser(
+        description='Virtual User Skill - AI User Research System',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --mode explore "What do users think about hotel upgrades?"
+  %(prog)s --mode pmf "AI room upgrade" --sample 20
+  %(prog)s --mode prd "Design A vs B" --sample 20
+  %(prog)s --mode metrics "Upgrade feature" --metrics "click_rate,conversion" --sample 50
+  %(prog)s --mode debate "Add AI recommendations?" --rounds 3
+        """
+    )
     
-    user_question = sys.argv[1]
-    auto_select = '--auto' in sys.argv
+    parser.add_argument('question', help='Research question or scenario description')
+    parser.add_argument('--mode', choices=VirtualUserSkill.MODES.keys(), 
+                        default='explore', help='Working mode (default: explore)')
+    parser.add_argument('--sample', type=int, default=None,
+                        help='Sample size (default varies by mode)')
+    parser.add_argument('--rounds', type=int, default=3,
+                        help='Debate rounds (mode=debate only, default: 3)')
+    parser.add_argument('--metrics', type=str, default='click_rate',
+                        help='Comma-separated metrics (mode=metrics only)')
+    parser.add_argument('--segment-by', type=str, default=None,
+                        help='Segmentation dimension (mode=metrics only)')
+    parser.add_argument('--auto', action='store_true',
+                        help='Auto-select top personas without prompting')
     
+    args = parser.parse_args()
+    
+    # Set mode-appropriate defaults
+    sample_defaults = {
+        'explore': 1, 'debate': 2, 'pmf': 20, 'prd': 20, 'metrics': 50
+    }
+    sample = args.sample or sample_defaults.get(args.mode, 20)
+    
+    # Run skill
     skill = VirtualUserSkill()
-    result = skill.run(user_question, auto_select=auto_select)
     
-    if result['success']:
-        print("\n✅ 技能执行完成")
-    else:
-        print("\n❌ 技能执行失败")
+    try:
+        result = skill.run(
+            question=args.question,
+            mode=args.mode,
+            sample=sample,
+            rounds=args.rounds,
+            metrics=args.metrics,
+            segment_by=args.segment_by,
+            auto_select=args.auto,
+        )
+        
+        if result.get('success'):
+            print(f"\n{'='*60}")
+            print(f"  Done. Mode: {args.mode} | Samples: {sample}")
+            print(f"{'='*60}\n")
+        else:
+            print(f"\n  Execution failed: {result.get('error', 'Unknown error')}")
+            sys.exit(1)
+            
+    except ImportError as e:
+        print(f"\n  Mode '{args.mode}' requires additional modules: {e}")
+        print(f"  Install with: pip install -r requirements.txt")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n  Error: {e}")
         sys.exit(1)
 
 
