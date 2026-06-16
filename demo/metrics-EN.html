@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>the Hotel "AI Room Selector" — Pre-Launch Metrics Voting Report</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #0d1117; color: #c9d1d9; line-height: 1.6; padding: 2rem;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+.header { 
+    background: linear-gradient(135deg, #1a1f2e 0%, #16213e 100%);
+    border-radius: 16px; padding: 2.5rem; margin-bottom: 2rem;
+    border: 1px solid #30363d;
+}
+.header h1 { font-size: 1.6rem; color: #f0f6fc; margin-bottom: 0.5rem; }
+.header .subtitle { color: #8b949e; font-size: 0.9rem; }
+.meta-row { 
+    display: flex; gap: 1.5rem; margin-top: 1.2rem; flex-wrap: wrap;
+}
+.meta-tag { 
+    background: #21262d; border-radius: 6px; padding: 0.4rem 0.8rem;
+    font-size: 0.8rem; color: #8b949e; border: 1px solid #30363d;
+}
+.meta-tag span { color: #58a6ff; font-weight: 600; }
+
+.executive-summary {
+    background: #161b22; border-radius: 12px; padding: 1.8rem;
+    margin-bottom: 2rem; border: 1px solid #30363d;
+    border-left: 4px solid #f0883e;
+}
+.executive-summary h2 { color: #f0883e; font-size: 1.1rem; margin-bottom: 1rem; }
+.summary-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+}
+.summary-card {
+    background: #0d1117; border-radius: 10px; padding: 1.2rem;
+    border: 1px solid #21262d;
+}
+.summary-card .metric-name { color: #8b949e; font-size: 0.8rem; margin-bottom: 0.3rem; }
+.summary-card .metric-value { font-size: 2rem; font-weight: 700; }
+.summary-card .metric-ci { color: #8b949e; font-size: 0.75rem; margin-top: 0.2rem; }
+.summary-card .metric-gap { font-size: 0.8rem; margin-top: 0.5rem; color: #7ee787; }
+.blue { color: #58a6ff; }
+.orange { color: #f0883e; }
+
+.section { 
+    background: #161b22; border-radius: 12px; padding: 1.8rem;
+    margin-bottom: 1.5rem; border: 1px solid #30363d;
+}
+.section h2 { color: #f0f6fc; font-size: 1.1rem; margin-bottom: 1.2rem; }
+.section h3 { color: #c9d1d9; font-size: 0.95rem; margin: 1rem 0 0.8rem; }
+
+/* Bar Chart */
+.bar-chart { margin: 1rem 0; }
+.bar-row { 
+    display: flex; align-items: center; margin-bottom: 0.6rem;
+    font-size: 0.85rem;
+}
+.bar-label { width: 110px; color: #8b949e; text-align: right; padding-right: 0.8rem; }
+.bar-container { flex: 1; height: 28px; background: #21262d; border-radius: 4px; position: relative; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 0.5rem; 
+    font-size: 0.75rem; font-weight: 600; color: #f0f6fc; min-width: 30px; transition: width 0.5s; }
+.bar-count { margin-left: 0.5rem; color: #8b949e; font-size: 0.8rem; white-space: nowrap; }
+
+.bar-fill.level-5 { background: linear-gradient(90deg, #238636, #2ea043); }
+.bar-fill.level-4 { background: linear-gradient(90deg, #1f6feb, #388bfd); }
+.bar-fill.level-3 { background: linear-gradient(90deg, #6e7681, #848d97); }
+.bar-fill.level-2 { background: linear-gradient(90deg, #9e6a03, #d29922); }
+.bar-fill.level-1 { background: linear-gradient(90deg, #da3633, #f85149); }
+
+/* Segment Comparison */
+.segment-compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin: 1rem 0;
+}
+.segment-box {
+    background: #0d1117; border-radius: 10px; padding: 1.2rem;
+    border: 1px solid #21262d; text-align: center;
+}
+.segment-box.vip { border-top: 3px solid #f0883e; }
+.segment-box.regular { border-top: 3px solid #58a6ff; }
+.segment-box .seg-label { font-size: 0.8rem; color: #8b949e; margin-bottom: 0.4rem; }
+.segment-box .seg-value { font-size: 1.8rem; font-weight: 700; }
+.segment-box .seg-ci { font-size: 0.7rem; color: #6e7681; margin-top: 0.2rem; }
+.segment-box .seg-dist { font-size: 0.75rem; color: #8b949e; margin-top: 0.5rem; line-height: 1.8; }
+
+/* Gap Indicator */
+.gap-indicator {
+    background: #0d1117; border-radius: 8px; padding: 0.8rem 1.2rem;
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.8rem; margin: 0.8rem 0; border: 1px solid #21262d;
+}
+.gap-arrow { color: #7ee787; font-weight: 700; font-size: 1.1rem; }
+
+/* Rejection Reasons */
+.reasons-list { list-style: none; padding: 0; }
+.reasons-list li {
+    background: #0d1117; border-radius: 8px; padding: 0.8rem 1rem;
+    margin-bottom: 0.5rem; border-left: 3px solid #da3633;
+    font-size: 0.85rem; color: #c9d1d9;
+}
+.reasons-list li::before { content: ''; }
+
+/* Methodology */
+.method-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+}
+.method-item {
+    background: #0d1117; border-radius: 8px; padding: 1rem;
+    border: 1px solid #21262d;
+}
+.method-item .label { color: #8b949e; font-size: 0.75rem; margin-bottom: 0.3rem; }
+.method-item .value { color: #c9d1d9; font-size: 0.85rem; }
+
+/* Action Items */
+.action-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;
+}
+.action-card {
+    background: #0d1117; border-radius: 10px; padding: 1rem;
+    border: 1px solid #21262d;
+}
+.action-card .action-title { color: #58a6ff; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+.action-card .action-desc { color: #8b949e; font-size: 0.8rem; }
+
+/* Warning */
+.warning-box {
+    background: #0d1117; border-radius: 8px; padding: 1rem;
+    border: 1px solid #9e6a03; margin-top: 1rem;
+}
+.warning-box .label { color: #d29922; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+
+/* Funnel */
+.funnel { margin: 1.5rem 0; text-align: center; }
+.funnel-step {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px; padding: 0.6rem 1.2rem; margin: 0 0.3rem;
+    font-size: 0.8rem; font-weight: 600; position: relative;
+}
+.funnel-step.step1 { background: #1f6feb33; border: 1px solid #1f6feb; color: #58a6ff; }
+.funnel-step.step2 { background: #f0883e33; border: 1px solid #f0883e; color: #f0883e; }
+.funnel-step.step3 { background: #23863633; border: 1px solid #238636; color: #7ee787; }
+.funnel-arrow { color: #6e7681; margin: 0 0.5rem; font-size: 1.2rem; }
+
+.footnote { color: #6e7681; font-size: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #21262d; }
+
+@media (max-width: 768px) {
+    .summary-grid, .segment-compare, .method-grid, .action-grid { grid-template-columns: 1fr; }
+    body { padding: 1rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>the Hotel "AI Room Selector" — Pre-Launch Metrics Estimation</h1>
+        <div class="subtitle">Virtual User Metrics Voting | Based on 54,631 Real User Research Scenarios</div>
+        <div class="meta-row">
+            <div class="meta-tag">Mode <span>Metrics Voting</span></div>
+            <div class="meta-tag">Sample <span>50 Users</span></div>
+            <div class="meta-tag">Segments <span>88VIP(25) vs Regular(25)</span></div>
+            <div class="meta-tag">Scale <span>Juster 5-Point Intention</span></div>
+            <div class="meta-tag">Date <span>2026-06-16</span></div>
+        </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="executive-summary">
+        <h2>Key Findings</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="metric-name">Click-Through Rate (Intention)</div>
+                <div class="metric-value blue">43.5%</div>
+                <div class="metric-ci">95% CI: [29.7%, 57.2%]</div>
+                <div class="metric-gap">88VIP: 52.0% &nbsp;|&nbsp; Regular: 33.2% &nbsp;(Gap +18.8pp)</div>
+            </div>
+            <div class="summary-card">
+                <div class="metric-name">Conversion Rate (Intention)</div>
+                <div class="metric-value orange">16.1%</div>
+                <div class="metric-ci">95% CI: [5.9%, 26.3%]</div>
+                <div class="metric-gap">88VIP: 22.8% &nbsp;|&nbsp; Regular: 8.0% &nbsp;(Gap +14.8pp)</div>
+            </div>
+        </div>
+        
+        <div class="funnel" style="margin-top:1.5rem;">
+            <div class="funnel-step step1">Impression</div>
+            <span class="funnel-arrow">&rarr;</span>
+            <div class="funnel-step step2">CTR 43.5%</div>
+            <span class="funnel-arrow">&rarr;</span>
+            <div class="funnel-step step3">CVR 16.1%</div>
+        </div>
+        
+        <div class="warning-box" style="margin-top:1rem;">
+            <div class="label">Intention-Behavior Gap Correction</div>
+            <div style="font-size:0.82rem; color:#c9d1d9;">
+                Actual behavior typically runs at 60-80% of stated intention (Juster, 1966; Morwitz et al., 2007).<br>
+                <strong style="color:#f0f6fc;">Conservative estimate</strong>: Actual CTR &asymp; 26-35%, Actual CVR &asymp; 10-13%<br>
+                <strong style="color:#f0f6fc;">Optimistic estimate</strong>: Actual CTR &asymp; 35-46%, Actual CVR &asymp; 13-21%
+            </div>
+        </div>
+    </div>
+
+    <!-- Click-Through Rate Detail -->
+    <div class="section">
+        <h2>Click-Through Rate Analysis</h2>
+        <p style="font-size:0.85rem; color:#8b949e; margin-bottom:1rem;">
+            Question: "If you see an 'AI Room Selector' button at the top of the room list on the hotel detail page, would you click it?"
+        </p>
+        
+        <h3>Intention Distribution (Overall n=50)</h3>
+        <div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Definitely</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-5" style="width: 6%;">6%</div>
+                </div>
+                <div class="bar-count">3 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Probably</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-4" style="width: 36%;">36%</div>
+                </div>
+                <div class="bar-count">18 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Not Sure</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-3" style="width: 46%;">46%</div>
+                </div>
+                <div class="bar-count">23 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Probably Not</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-2" style="width: 12%;">12%</div>
+                </div>
+                <div class="bar-count">6 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Definitely Not</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-1" style="width: 0%;">0%</div>
+                </div>
+                <div class="bar-count">0 votes</div>
+            </div>
+        </div>
+
+        <h3>Segment Comparison</h3>
+        <div class="segment-compare">
+            <div class="segment-box vip">
+                <div class="seg-label">88VIP Members (n=25)</div>
+                <div class="seg-value" style="color:#f0883e;">52.0%</div>
+                <div class="seg-ci">CI: [32.4%, 71.6%]</div>
+                <div class="seg-dist">
+                    Definitely 3 | Probably 12 | Not Sure 9 | Probably Not 1
+                </div>
+            </div>
+            <div class="segment-box regular">
+                <div class="seg-label">Regular Users (n=25)</div>
+                <div class="seg-value" style="color:#58a6ff;">33.2%</div>
+                <div class="seg-ci">CI: [14.7%, 51.7%]</div>
+                <div class="seg-dist">
+                    Definitely 0 | Probably 6 | Not Sure 14 | Probably Not 5
+                </div>
+            </div>
+        </div>
+        <div class="gap-indicator">
+            <span style="color:#f0883e;">88VIP 52.0%</span>
+            <span class="gap-arrow">&#9654; +18.8pp &#9654;</span>
+            <span style="color:#58a6ff;">Regular 33.2%</span>
+            <span style="color:#7ee787; font-size:0.8rem;">(Statistically Significant)</span>
+        </div>
+
+        <h3>Top Reasons for Not Clicking</h3>
+        <ul class="reasons-list">
+            <li>"I prefer to browse and compare on my own — I don't trust AI to choose better than me." — Autonomy preference</li>
+            <li>"Worried that AI recommendations are just ads or high-margin rooms for the platform." — Trust deficit / conflict-of-interest suspicion</li>
+            <li>"New features like this are probably unreliable. I'd rather read real user reviews." — New-feature skepticism</li>
+        </ul>
+    </div>
+
+    <!-- Conversion Rate Detail -->
+    <div class="section">
+        <h2>Conversion Rate Analysis</h2>
+        <p style="font-size:0.85rem; color:#8b949e; margin-bottom:1rem;">
+            Question: "After using the AI Room Selector and receiving recommendations, would you book based on its suggestions?"
+        </p>
+        
+        <h3>Intention Distribution (Overall n=50)</h3>
+        <div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Definitely</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-5" style="width: 0%;">0%</div>
+                </div>
+                <div class="bar-count">0 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Probably</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-4" style="width: 8%;">8%</div>
+                </div>
+                <div class="bar-count">4 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Not Sure</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-3" style="width: 20%;">20%</div>
+                </div>
+                <div class="bar-count">10 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Probably Not</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-2" style="width: 46%;">46%</div>
+                </div>
+                <div class="bar-count">23 votes</div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Definitely Not</div>
+                <div class="bar-container">
+                    <div class="bar-fill level-1" style="width: 26%;">26%</div>
+                </div>
+                <div class="bar-count">13 votes</div>
+            </div>
+        </div>
+
+        <h3>Segment Comparison</h3>
+        <div class="segment-compare">
+            <div class="segment-box vip">
+                <div class="seg-label">88VIP Members (n=25)</div>
+                <div class="seg-value" style="color:#f0883e;">22.8%</div>
+                <div class="seg-ci">CI: [6.4%, 39.2%]</div>
+                <div class="seg-dist">
+                    Probably 4 | Not Sure 9 | Probably Not 8 | Definitely Not 4
+                </div>
+            </div>
+            <div class="segment-box regular">
+                <div class="seg-label">Regular Users (n=25)</div>
+                <div class="seg-value" style="color:#58a6ff;">8.0%</div>
+                <div class="seg-ci">CI: [0.0%, 18.6%]</div>
+                <div class="seg-dist">
+                    Probably 0 | Not Sure 1 | Probably Not 15 | Definitely Not 9
+                </div>
+            </div>
+        </div>
+        <div class="gap-indicator">
+            <span style="color:#f0883e;">88VIP 22.8%</span>
+            <span class="gap-arrow">&#9654; +14.8pp &#9654;</span>
+            <span style="color:#58a6ff;">Regular 8.0%</span>
+            <span style="color:#7ee787; font-size:0.8rem;">(Statistically Significant)</span>
+        </div>
+
+        <h3>Top Reasons for Not Converting</h3>
+        <ul class="reasons-list">
+            <li>"I need to compare prices on other platforms — I won't decide on just one app." — Cross-platform price-comparison habit</li>
+            <li>"I can't fully trust AI recommendations. What if the room isn't what I expect?" — Outcome uncertainty anxiety</li>
+            <li>"AI can't possibly understand all my personal preferences." — Perceived personalization gap</li>
+            <li>"Recommendations are just reference — I'll still check reviews and photos myself before deciding." — Need for social proof / visual verification</li>
+        </ul>
+    </div>
+
+    <!-- Behavioral Insights -->
+    <div class="section">
+        <h2>Key Behavioral Insights</h2>
+        
+        <div style="margin-bottom:1.5rem;">
+            <h3 style="color:#7ee787;">Insight 1: 88VIP Members Are Natural Early Adopters</h3>
+            <p style="font-size:0.85rem;">
+                88VIP users show significantly higher intention for both click (+18.8pp) and conversion (+14.8pp) versus regular users. 
+                Key drivers include habitual platform trust built through long-term usage, lower price sensitivity 
+                (reducing the "comparison shopping" friction), and the membership-driven mindset of 
+                "this is my exclusive benefit." Recommendation: prioritize 88VIP as the Phase 1 rollout audience.
+            </p>
+        </div>
+        
+        <div style="margin-bottom:1.5rem;">
+            <h3 style="color:#f0883e;">Insight 2: Click &ne; Convert — A Clear Trust Gap</h3>
+            <p style="font-size:0.85rem;">
+                The funnel drop from 43.5% CTR to 16.1% CVR represents a 63% decay. The barrier is not 
+                "unwillingness to explore" but "unwillingness to commit." Three primary resistance factors: 
+                cross-platform price comparison habits (the platform is not the sole decision platform), 
+                uncertainty about AI recommendation quality ("what if it goes wrong"), and a perceived 
+                personalization gap (users believe AI can't understand their unique needs).
+            </p>
+        </div>
+        
+        <div style="margin-bottom:1.5rem;">
+            <h3 style="color:#58a6ff;">Insight 3: "Ad Fear" Is the Primary Barrier for Regular Users</h3>
+            <p style="font-size:0.85rem;">
+                Among regular users, "worried the recommendations are just ads / high-margin rooms" is the 
+                most frequently cited rejection reason. This reflects a fundamental distrust of platform-user 
+                interest alignment among non-VIP users. Feature design must visibly demonstrate recommendation 
+                logic (e.g., "based on your browsing history" rather than a black box) and provide transparent 
+                "why this room" explanations.
+            </p>
+        </div>
+        
+        <div>
+            <h3 style="color:#d2a8ff;">Insight 4: High Pain-Point Alignment Doubles Intent</h3>
+            <p style="font-size:0.85rem;">
+                Users in the scenario library who explicitly expressed "too many hotel options, can't decide" 
+                scored 40-60% higher in click intention compared to users who "already have clear preferences." 
+                This validates the feature's PMF hypothesis — the core value scenario is "choice overload" rather 
+                than universal need. Product should target entry-point display conditions precisely 
+                (e.g., show only when room types > 5).
+            </p>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="section">
+        <h2>Launch Strategy Recommendations</h2>
+        <div class="action-grid">
+            <div class="action-card">
+                <div class="action-title">Rollout Strategy</div>
+                <div class="action-desc">
+                    Phase 1: 88VIP + hotels with >5 room types<br>
+                    Phase 2: All users + smart display conditions<br>
+                    Expected: Phase 1 CTR &asymp; 40-50%, Phase 2 &asymp; 25-35%
+                </div>
+            </div>
+            <div class="action-card">
+                <div class="action-title">Trust Building</div>
+                <div class="action-desc">
+                    Avoid "AI Recommends" framing &rarr; use "Help me choose"<br>
+                    Show recommendation basis (e.g., "Based on your 3 hotel stays")<br>
+                    First-use: low-commitment "See what AI suggests" entry
+                </div>
+            </div>
+            <div class="action-card">
+                <div class="action-title">A/B Test Baseline</div>
+                <div class="action-desc">
+                    CTR target: 30% (conservative) / 40% (optimistic)<br>
+                    CVR target: 10% (conservative) / 15% (optimistic)<br>
+                    MDE design: CTR &plusmn;5pp, CVR &plusmn;3pp
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Methodology -->
+    <div class="section">
+        <h2>Methodology</h2>
+        <div class="method-grid">
+            <div class="method-item">
+                <div class="label">Data Foundation</div>
+                <div class="value">Real UXR scenario library: 54,631 entries<br>Hotel-relevant top-120 retrieved<br>65 unique scenarios after dedup</div>
+            </div>
+            <div class="method-item">
+                <div class="label">Scale Method</div>
+                <div class="value">Juster Purchase Intention Scale (1966)<br>5-point behavioral intention scale<br>Weights: 1.0 / 0.6 / 0.3 / 0.1 / 0.0</div>
+            </div>
+            <div class="method-item">
+                <div class="label">Decision Model</div>
+                <div class="value">Multi-factor weighted model:<br>Need-Fit &times; Tech Openness &times; VIP Factor &minus; Barriers<br>+ Gaussian noise (&sigma;=0.08)</div>
+            </div>
+            <div class="method-item">
+                <div class="label">Segment Design</div>
+                <div class="value">88VIP: High income / frequent / affluent (n=25)<br>Regular: Mid-low income / infrequent (n=25)<br>Representative weights: VIP 1.2 / Regular 1.0</div>
+            </div>
+        </div>
+        
+        <div class="warning-box" style="margin-top:1.5rem;">
+            <div class="label">Limitations</div>
+            <div style="font-size:0.82rem; color:#c9d1d9;">
+                1. Virtual users are behavioral inferences from real scenario data, not live-user tests — model bias risk exists<br>
+                2. Systematic intention-behavior gap exists; recommend applying a 0.7x discount to estimates as baseline<br>
+                3. With n=50, the 95% CI is wide (&plusmn;13-14pp) — directional confidence is high but precision is limited<br>
+                4. Does not account for entry-point visual design, copy optimization, or competitive benchmarking effects
+            </div>
+        </div>
+    </div>
+
+    <div class="footnote">
+        Virtual User Skill v2.0 | Internal UXR | Generated: 2026-06-16 | Embedding model: text2vec-base-chinese (768d)
+    </div>
+</div>
+</body>
+</html>

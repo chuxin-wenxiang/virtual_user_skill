@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Room Type Selection — User Decision Anxiety Exploration</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent2: #f59e0b;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  --card-bg: #1e293b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  padding: 0;
+}
+.container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+.header {
+  text-align: center;
+  padding: 60px 24px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+  border-bottom: 3px solid var(--accent);
+  margin-bottom: 48px;
+}
+.header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.02em; }
+.header .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+.meta-bar {
+  display: flex; gap: 24px; justify-content: center; margin-top: 16px;
+  font-size: 0.85rem; color: var(--text-muted);
+}
+.meta-bar span { display: flex; align-items: center; gap: 6px; }
+.section { margin-bottom: 48px; }
+.section-title {
+  font-size: 1.3rem; font-weight: 600; margin-bottom: 20px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 20px;
+}
+.persona-header {
+  display: flex; align-items: center; gap: 16px; margin-bottom: 20px;
+}
+.persona-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.persona-avatar.carol { background: linear-gradient(135deg, #667eea, #764ba2); }
+.persona-avatar.chen { background: linear-gradient(135deg, #f093fb, #f5576c); }
+.persona-name { font-size: 1.1rem; font-weight: 600; }
+.persona-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.tag {
+  font-size: 0.75rem; padding: 3px 10px; border-radius: 20px;
+  background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border);
+}
+.dialogue { margin-top: 16px; }
+.dialogue .turn { margin-bottom: 16px; padding-left: 16px; border-left: 3px solid transparent; }
+.dialogue .turn.researcher { border-left-color: var(--accent2); }
+.dialogue .turn.user { border-left-color: var(--accent); }
+.dialogue .speaker { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.dialogue .turn.researcher .speaker { color: var(--accent2); }
+.dialogue .turn.user .speaker { color: var(--accent); }
+.dialogue .content { font-size: 0.92rem; color: var(--text); }
+.highlight { background: rgba(233, 69, 96, 0.15); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.insight-box {
+  background: linear-gradient(135deg, rgba(233, 69, 96, 0.08), rgba(245, 158, 11, 0.08));
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 20px;
+}
+.insight-box h4 { color: var(--accent); margin-bottom: 12px; font-size: 0.95rem; }
+.insight-box p { font-size: 0.9rem; color: var(--text); margin-bottom: 8px; }
+.quote-block {
+  border-left: 3px solid var(--accent2);
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: rgba(245, 158, 11, 0.05);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+.comparison-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px;
+}
+@media (max-width: 600px) { .comparison-grid { grid-template-columns: 1fr; } }
+.comparison-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.comparison-card h4 { font-size: 0.9rem; margin-bottom: 12px; }
+.comparison-card .label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+.comparison-card .value { font-size: 0.88rem; margin-bottom: 12px; }
+.action-list { margin-top: 16px; }
+.action-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.action-item:last-child { border-bottom: none; }
+.action-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 0.8rem;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; flex-shrink: 0;
+}
+.action-text { font-size: 0.9rem; }
+.action-text strong { color: var(--accent2); }
+.footer {
+  text-align: center; padding: 32px 0; margin-top: 48px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem; color: var(--text-muted);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Hotel Room Type Selection — User Decision Anxiety</h1>
+  <p class="subtitle">Virtual User Exploration Mode · 1v1 In-depth Interview Insights</p>
+  <div class="meta-bar">
+    <span>📅 2026-06-16</span>
+    <span>🔍 Corpus Match: Top 20 from 54,631 scenarios</span>
+    <span>👥 Virtual Users Interviewed: 2</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Section 1: Background -->
+<div class="section">
+  <h2 class="section-title">Research Background</h2>
+  <div class="card">
+    <p>This exploration focused on a core product experience question: <strong>What makes the platform's hotel users hesitate most when choosing a room type?</strong></p>
+    <p style="margin-top: 12px;">Using the Virtual User Skill's exploration mode, we retrieved 20 highly relevant scenarios from a corpus of 54,631 real user research entries, then constructed two differentiated personas representing two typical hesitation paths: "information overload paralysis" and "upgrade value uncertainty."</p>
+    <p style="margin-top: 12px; color: var(--text-muted); font-size: 0.88rem;">Method: Semantic vector retrieval (text2vec-base-chinese, 768d) → persona generation → 1v1 semi-structured in-depth interview</p>
+  </div>
+</div>
+
+<!-- Section 2: User 1 Carol -->
+<div class="section">
+  <h2 class="section-title">Interview 1: The Information Architecture Trap</h2>
+  <div class="card">
+    <div class="persona-header">
+      <div class="persona-avatar carol">C</div>
+      <div>
+        <div class="persona-name">Carol · Established Middle Class</div>
+        <div class="persona-tags">
+          <span class="tag">Age 37</span>
+          <span class="tag">Married, 1 child (primary school)</span>
+          <span class="tag">¥30k/month</span>
+          <span class="tag">Fashion industry</span>
+          <span class="tag">Family traveler</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialogue">
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">Tell me about your most recent experience choosing a room type on the platform.</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Carol</div>
+        <div class="content">Last time I was booking a resort in Sanya for my family. Clicked in and saw seven or eight room types — "Superior Sea View," "Deluxe Ocean Suite," "Premium Family Room," "Select Garden Twin"… The names were fancier than the last, but I <span class="highlight">couldn't tell what actually differed between them</span>.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">Was it just the names that confused you, or other information too?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Carol</div>
+        <div class="content">Both. Once you tap in, it gets worse. Under a single room type there are multiple "packages" — with breakfast, without breakfast, free cancellation until X date, non-refundable. Prices from ¥400 to ¥900 all listed together. I spent ages scrolling through just one room type. And there were six more waiting outside…</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">What was the core source of your hesitation?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Carol</div>
+        <div class="content">I know exactly what I need: a king bed with an extra bed option, breakfast included, free cancellation — because plans change with kids. But <span class="highlight">the options matching my criteria were buried among irrelevant ones</span>. I had to eliminate them one by one. Spent half an hour still wondering if the ¥200 gap between "Deluxe" and "Superior" was worth it.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">Did you figure out what that ¥200 difference actually bought you?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Carol</div>
+        <div class="content">Not really. The description said "larger area" without specifying how many square meters more. "Higher floor" without saying which floor. In the end I picked the pricier one, thinking "the expensive one can't be bad"… but that decision-making process felt terrible. Like <span class="highlight">being forced to choose blind</span>.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">If you ranked your frustration points?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Carol</div>
+        <div class="content">First, what actually differs between room types — fancy names but vague substance. Second, too many package combinations. Third, whether the price gap is justified — nobody explains clearly. Fourth, suitability for kids — extra bed, children's amenities — I have to dig through reviews myself.</div>
+      </div>
+    </div>
+
+    <div class="quote-block">
+      "It's not that there's too much information — it's that <strong>too much of it is irrelevant to me</strong>."
+    </div>
+
+    <div class="insight-box">
+      <h4>🔑 Key Insight</h4>
+      <p><strong>Root Cause</strong>: Information architecture doesn't serve the decision path. Excessive options × abstract naming × no personalized filtering = inflated comparison time.</p>
+      <p><strong>Underlying Need</strong>: Help me make a confident decision in 5 minutes, instead of spending 30 minutes placing a bet that "the expensive one is probably fine."</p>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: User 2 Xiao Chen -->
+<div class="section">
+  <h2 class="section-title">Interview 2: The Upgrade Value Black Box</h2>
+  <div class="card">
+    <div class="persona-header">
+      <div class="persona-avatar chen">X</div>
+      <div>
+        <div class="persona-name">Xiao Chen · Gen Z</div>
+        <div class="persona-tags">
+          <span class="tag">Age 22</span>
+          <span class="tag">Single</span>
+          <span class="tag">¥20k/month</span>
+          <span class="tag">Foreign trade</span>
+          <span class="tag">Travels with partner / colleagues</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialogue">
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">When does the hesitation start for you when picking a room type on the platform?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Xiao Chen</div>
+        <div class="content">After I pick a hotel and tap into the room list — I notice the cheapest option and the next tier up are only about ¥100 apart. That's when my brain starts going: <span class="highlight">"I'm already spending this much, would another ¥100 make it noticeably better?"</span> But the problem is I can't actually see what makes it better.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">How do you usually end up deciding?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Xiao Chen</div>
+        <div class="content">If I'm traveling with my girlfriend, I lean toward the pricier one — don't want to ruin the mood over ¥100. For work trips with colleagues, I go cheap. But either way, <span class="highlight">I feel uneasy after deciding</span>. Pick the expensive one and wonder if I got ripped off. Pick the cheap one and wonder if I'll regret it.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">Is that unease from insufficient information or unclear personal standards?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Xiao Chen</div>
+        <div class="content">Insufficient information. My standards are crystal clear — clean, quiet, bed not too small. But neither "Standard Room" nor "Superior Room" lets me confirm these three things before I book. They write "comfortable king bed" — is that 1.5m or 1.8m? I've even checked in to find a "king bed" that was actually 1.2m.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">Beyond specs, what other information would help your decision?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Xiao Chen</div>
+        <div class="content">I desperately want to see <span class="highlight">"reviews that specifically mention this room type"</span>. Like someone saying "the Superior is genuinely quieter than Standard" or "that extra ¥100 only gets you a bathtub I never used." This kind of peer feedback is infinitely more useful than the hotel's own description. But the review section is a catch-all for the entire property.</div>
+      </div>
+      <div class="turn researcher">
+        <div class="speaker">Researcher</div>
+        <div class="content">If you could change only one thing?</div>
+      </div>
+      <div class="turn user">
+        <div class="speaker">Xiao Chen</div>
+        <div class="content">When I'm torn between two room types, just tell me what the price difference buys. Pop a card: "+¥120 = Balcony (4m²) + High floor (15-20F) + Bathtub." One line and I can instantly judge if it's worth it.</div>
+      </div>
+    </div>
+
+    <div class="quote-block">
+      "I'm not hesitating about the choice itself — I'm hesitating because <strong>I don't know what I'm choosing</strong>. I'm not afraid to spend money; I'm afraid of spending it and finding out it's no different from the cheap option."
+    </div>
+
+    <div class="insight-box">
+      <h4>🔑 Key Insight</h4>
+      <p><strong>Root Cause</strong>: Upgrade value is opaque. Small price gap × invisible difference × reviews not segmented by room type = post-decision anxiety.</p>
+      <p><strong>Underlying Need</strong>: Every yuan spent should be clearly accounted for — give me instant, concrete feedback on "what my extra money buys."</p>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Comparative Analysis -->
+<div class="section">
+  <h2 class="section-title">Comparative Analysis</h2>
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <h4 style="color: #667eea;">Carol · Established Middle Class</h4>
+      <div class="label">Hesitation Type</div>
+      <div class="value">Information structure problem — signal buried in noise</div>
+      <div class="label">Core Pain Point</div>
+      <div class="value">Too many options, abstract naming, no personalized filtering</div>
+      <div class="label">Decision Blocker</div>
+      <div class="value">"Can't find relevant info" → forced blind selection</div>
+      <div class="label">Desired Solution</div>
+      <div class="value">"Know who I am, and tell me which to pick"</div>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color: #f5576c;">Xiao Chen · Gen Z</h4>
+      <div class="label">Hesitation Type</div>
+      <div class="value">Value judgment problem — upgrade value is opaque</div>
+      <div class="label">Core Pain Point</div>
+      <div class="value">Small price gap but invisible difference, reviews unlinked to room types</div>
+      <div class="label">Decision Blocker</div>
+      <div class="value">"Don't know what extra money buys" → post-decision anxiety</div>
+      <div class="label">Desired Solution</div>
+      <div class="value">"One line telling me +¥120 = what"</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top: 20px;">
+    <p><strong>Shared underlying need:</strong> Confidence before checkout. Despite surface-level differences, both point to the same product gap — <span class="highlight">room type information lacks "comparability"</span>. The platform provides abundant information but fails to organize it into structures that serve users' specific decision contexts.</p>
+  </div>
+</div>
+
+<!-- Section 5: Product Opportunities -->
+<div class="section">
+  <h2 class="section-title">Product Opportunity Areas</h2>
+  <div class="card">
+    <div class="action-list">
+      <div class="action-item">
+        <div class="action-num">1</div>
+        <div class="action-text"><strong>Instant Room Type Comparison Card</strong> — When a user hesitates between two room types, surface a difference summary: "+¥X = specific gains." Make implicit differences explicit.</div>
+      </div>
+      <div class="action-item">
+        <div class="action-num">2</div>
+        <div class="action-text"><strong>Profile-based "Relevant to Me" Filter</strong> — Auto-collapse irrelevant room types based on travel companions and trip purpose. Surface matching options first (e.g., family travelers see only extra-bed-capable rooms).</div>
+      </div>
+      <div class="action-item">
+        <div class="action-num">3</div>
+        <div class="action-text"><strong>Reviews Segmented by Room Type</strong> — Under each room type, show "What people who stayed in this room said" instead of whole-property review aggregation. Let peer feedback directly serve room-level decisions.</div>
+      </div>
+      <div class="action-item">
+        <div class="action-num">4</div>
+        <div class="action-text"><strong>Mandatory Key Parameter Transparency</strong> — Room area (m²), bed width (cm), floor range, window type (window/bay window/none) as structured fields with enforced display.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Methodology -->
+<div class="section">
+  <h2 class="section-title">Methodology</h2>
+  <div class="card" style="font-size: 0.88rem; color: var(--text-muted);">
+    <p><strong>Data Foundation</strong>: 54,631 real user research scenarios (NPS feedback + in-depth interviews), Fernet encrypted storage.</p>
+    <p style="margin-top: 8px;"><strong>Retrieval Method</strong>: text2vec-base-chinese (768-dim) semantic vector search, cosine similarity Top-20, highest match score 0.797.</p>
+    <p style="margin-top: 8px;"><strong>Persona Generation</strong>: Constructed from retrieved scenarios' background info, pain points, and needs fields, ensuring demographic and behavioral diversity.</p>
+    <p style="margin-top: 8px;"><strong>Interview Method</strong>: Semi-structured 1v1 in-depth interview with first-person role-play constrained by persona context.</p>
+    <p style="margin-top: 8px;"><strong>Limitations</strong>: Virtual users are projected from historical corpus rather than real-time humans. Exploratory findings require quantitative validation (recommend PMF mode with 20+ participants).</p>
+  </div>
+</div>
+
+</div>
+
+<div class="footer">
+  the platform User Experience Research · Virtual User Skill v2.0 · Exploration Mode Report · 2026-06-16
+</div>
+
+</body>
+</html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Booking Page — Interaction Design PRD Calibration Report</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent2: #00d2d3;
+  --accent3: #feca57;
+  --text: #eaeaea;
+  --text-dim: #a0a0b0;
+  --border: #2a2a4a;
+  --green: #10ac84;
+  --orange: #ff9f43;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  padding: 40px 20px;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.subtitle { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 32px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 24px;
+}
+.card h2 {
+  font-size: 1.2rem;
+  margin-bottom: 16px;
+  color: var(--accent2);
+}
+.card h3 {
+  font-size: 1rem;
+  margin: 16px 0 8px;
+  color: var(--accent3);
+}
+
+.ranking-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+.rank-card {
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  position: relative;
+  border: 2px solid transparent;
+  transition: transform 0.2s;
+}
+.rank-card:hover { transform: translateY(-3px); }
+.rank-card.rank-1 { border-color: var(--accent2); box-shadow: 0 0 20px rgba(0,210,211,0.15); }
+.rank-card.rank-2 { border-color: var(--orange); }
+.rank-card.rank-3 { border-color: var(--text-dim); }
+.rank-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent2);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 2px 12px;
+  border-radius: 10px;
+}
+.rank-card.rank-2 .rank-badge { background: var(--orange); }
+.rank-card.rank-3 .rank-badge { background: var(--text-dim); color: var(--bg); }
+.rank-score { font-size: 2.2rem; font-weight: 700; margin: 12px 0 4px; }
+.rank-card.rank-1 .rank-score { color: var(--accent2); }
+.rank-card.rank-2 .rank-score { color: var(--orange); }
+.rank-card.rank-3 .rank-score { color: var(--text-dim); }
+.rank-label { font-size: 0.8rem; color: var(--text-dim); }
+.rank-name { font-size: 0.95rem; font-weight: 600; margin-top: 8px; }
+
+.dims-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.dims-table th, .dims-table td { padding: 10px 12px; text-align: center; border-bottom: 1px solid var(--border); }
+.dims-table th { color: var(--text-dim); font-size: 0.8rem; font-weight: 500; }
+.dims-table td { font-size: 0.9rem; }
+.dims-table tr:last-child td { border-bottom: none; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 6px; margin-top: 4px; }
+.tag-a { background: rgba(233,69,96,0.2); color: var(--accent); }
+.tag-b { background: rgba(254,202,87,0.2); color: var(--accent3); }
+.tag-c { background: rgba(0,210,211,0.2); color: var(--accent2); }
+
+.insight-block { background: var(--surface2); border-radius: 8px; padding: 16px; margin: 12px 0; }
+.insight-block p { color: var(--text-dim); font-size: 0.88rem; margin-top: 6px; }
+
+.quote {
+  border-left: 3px solid var(--accent2);
+  padding: 8px 16px;
+  margin: 10px 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.quote .name { color: var(--text); font-style: normal; font-weight: 600; font-size: 0.8rem; }
+
+.metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+.metric-item { background: var(--surface2); border-radius: 8px; padding: 14px; }
+.metric-item .label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+.metric-item .value { font-size: 0.95rem; margin-top: 4px; }
+
+.footer { text-align: center; color: var(--text-dim); font-size: 0.75rem; margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+@media (max-width: 768px) {
+  .ranking-grid { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Hotel Booking Page — Interaction Design PRD Calibration</h1>
+<p class="subtitle">Mode: PRD Calibration (4-Dimension Weighted Scoring) | Sample: 20 Virtual Users | Scenario Library: 54,631 Real Research Records | 2026-06-16</p>
+
+<!-- ═══ Ranking Overview ═══ -->
+<div class="card">
+  <h2>Overall Ranking</h2>
+  <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:12px;">Weighting formula: Need-Fit × 30% + Experience Clarity × 25% + Potential Impact × 25% + Priority Urgency × 20%. Each dimension scored 1–10.</p>
+  
+  <div class="ranking-grid">
+    <div class="rank-card rank-1">
+      <div class="rank-badge">#1 RECOMMENDED</div>
+      <div class="rank-name">Option C</div>
+      <div style="font-size:0.8rem;color:var(--text-dim);margin-top:4px;">Comparison Matrix + AI Best-Pick Label</div>
+      <div class="rank-score">7.57</div>
+      <div class="rank-label">/10 Weighted Composite</div>
+    </div>
+    <div class="rank-card rank-2">
+      <div class="rank-badge">#2</div>
+      <div class="rank-name">Option A</div>
+      <div style="font-size:0.8rem;color:var(--text-dim);margin-top:4px;">History-Based Auto Recommendation</div>
+      <div class="rank-score">6.86</div>
+      <div class="rank-label">/10 Weighted Composite</div>
+    </div>
+    <div class="rank-card rank-3">
+      <div class="rank-badge">#3</div>
+      <div class="rank-name">Option B</div>
+      <div style="font-size:0.8rem;color:var(--text-dim);margin-top:4px;">Conversational AI Room Selector</div>
+      <div class="rank-score">6.26</div>
+      <div class="rank-label">/10 Weighted Composite</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Dimension Breakdown ═══ -->
+<div class="card">
+  <h2>Four-Dimension Score Breakdown</h2>
+  <table class="dims-table">
+    <thead>
+      <tr>
+        <th style="text-align:left;">Dimension</th>
+        <th>Weight</th>
+        <th><span class="tag tag-a">Option A</span></th>
+        <th><span class="tag tag-b">Option B</span></th>
+        <th><span class="tag tag-c">Option C</span></th>
+        <th>Key Insight</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Need-Fit</td>
+        <td>30%</td>
+        <td>6.9 <span style="font-size:0.7rem;color:var(--text-dim);">±1.55</span></td>
+        <td>6.8 <span style="font-size:0.7rem;color:var(--text-dim);">±1.27</span></td>
+        <td style="color:var(--accent2);font-weight:600;">7.7 <span style="font-size:0.7rem;color:var(--text-dim);">±0.99</span></td>
+        <td style="font-size:0.8rem;color:var(--text-dim);text-align:left;">C has strongest consensus (lowest SD); A weak for new users</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Experience Clarity</td>
+        <td>25%</td>
+        <td style="color:var(--accent);font-weight:600;">8.0 <span style="font-size:0.7rem;color:var(--text-dim);">±1.03</span></td>
+        <td>5.5 <span style="font-size:0.7rem;color:var(--text-dim);">±1.82</span></td>
+        <td>7.7 <span style="font-size:0.7rem;color:var(--text-dim);">±0.81</span></td>
+        <td style="font-size:0.8rem;color:var(--text-dim);text-align:left;">B most polarized (SD=1.82); older users drag down avg</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Potential Impact</td>
+        <td>25%</td>
+        <td>6.3 <span style="font-size:0.7rem;color:var(--text-dim);">±1.42</span></td>
+        <td>7.4 <span style="font-size:0.7rem;color:var(--text-dim);">±1.14</span></td>
+        <td style="color:var(--accent2);font-weight:600;">7.7 <span style="font-size:0.7rem;color:var(--text-dim);">±1.31</span></td>
+        <td style="font-size:0.8rem;color:var(--text-dim);text-align:left;">B strong for explorers; C stable across all segments</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Priority Urgency</td>
+        <td>20%</td>
+        <td>6.0 <span style="font-size:0.7rem;color:var(--text-dim);">±0.97</span></td>
+        <td>4.8 <span style="font-size:0.7rem;color:var(--text-dim);">±1.69</span></td>
+        <td style="color:var(--accent2);font-weight:600;">7.2 <span style="font-size:0.7rem;color:var(--text-dim);">±1.45</span></td>
+        <td style="font-size:0.8rem;color:var(--text-dim);text-align:left;">C leads clearly; B perceived as "nice-to-have"</td>
+      </tr>
+      <tr style="background:rgba(0,210,211,0.05);">
+        <td style="text-align:left;font-weight:700;">Weighted Composite</td>
+        <td>100%</td>
+        <td><strong>6.86</strong></td>
+        <td><strong>6.26</strong></td>
+        <td style="color:var(--accent2);"><strong>7.57</strong></td>
+        <td style="font-size:0.8rem;color:var(--text-dim);text-align:left;">C > A > B; C leads A by 0.71 pts (significant)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ Key Findings ═══ -->
+<div class="card">
+  <h2>Key Findings & Experience Blind Spots</h2>
+  
+  <h3>Why Option C Wins: Optimal Balance of Information Density + Low Cognitive Load</h3>
+  <div class="insight-block">
+    <p>The comparison matrix delivers "everything visible on one screen" information density — users get a full picture of room-type differences without any additional interaction. The AI "Best for You" label further reduces decision cost by adding a one-click shortcut on top of comprehensive information display. This combination strongly appeals to both "rational comparison" users (white-collar professionals, established mid-income) and "efficiency-oriented" users, forming the broadest beneficiary base in this evaluation.</p>
+  </div>
+
+  <h3>Option A — Strength & Limitation: Efficiency Shortcut for Repeat Users, Blank Page for New Ones</h3>
+  <div class="insight-block">
+    <p>Option A achieved the highest score across all options in "Experience Clarity" (8.0), confirming that auto-recommendation is extremely intuitive — highlight + label, zero learning curve. However, its heavy dependency on historical data is a critical weakness: new/infrequent users (~40% of sample) rated Need-Fit significantly lower because "it can't recommend anything without history." Furthermore, frequent users acknowledged its convenience but rated "Potential Impact" low — they already know what they want.</p>
+  </div>
+
+  <h3>Option B — Sharp Polarization: Strong Signal from Young Explorers vs. High Barrier for All</h3>
+  <div class="insight-block">
+    <p>Option B's Experience Clarity SD of 1.82 (highest in the study) reveals severe divergence in how users perceive conversational interaction: Gen-Z and explorer-type users rated 7–8 (accustomed to ChatGPT paradigm), while efficiency-oriented and older users rated only 3–5 ("I still have to figure out what to ask it"). The "Potential Impact" score (7.4) indicates it genuinely changes decision behavior once adopted, but "Priority Urgency" is the lowest (4.8) — most users feel "hotel room selection isn't complex enough to need this."</p>
+  </div>
+
+  <h3>Critical Experience Blind Spots</h3>
+  <div class="insight-block">
+    <p><strong>Option A:</strong> Cold-start problem — first-time platform users or cross-context bookings (switching from business to leisure) get inaccurate recommendations; requires a fallback design.</p>
+    <p><strong>Option B:</strong> Interaction efficiency — "By the time I type out my requirements, I could have scrolled through all the room options myself" (efficiency-oriented users); needs quick-entry shortcuts or preset question templates.</p>
+    <p><strong>Option C:</strong> Information overload risk — when a hotel has more than 6 room types, the matrix may become cluttered; needs collapse/filter mechanisms.</p>
+  </div>
+</div>
+
+<!-- ═══ User Voices ═══ -->
+<div class="card">
+  <h2>Representative User Perspectives (Scenario-Based Extrapolation)</h2>
+  
+  <div class="quote">
+    <div class="name">Edward S. (Gen-Z, 22) <span class="tag tag-b">Prefers B</span></div>
+    "I use AI chatbots (Doubao, ChatGPT) all the time. If I could talk to the hotel page like 'I want a sea view, somewhere quiet,' that'd be way faster than clicking into each room one by one."
+  </div>
+  
+  <div class="quote">
+    <div class="name">Amanda R. (Young Professional, 30) <span class="tag tag-c">Prefers C</span></div>
+    "The most annoying thing about booking hotels on this platform was switching back and forth between pages to compare. If a matrix showed price, size, and amenities all at once — and marked which one suits me best — I could decide in seconds."
+  </div>
+  
+  <div class="quote">
+    <div class="name">Mary L. (Parent Traveler, 41) <span class="tag tag-c">Prefers C</span> <span class="tag tag-a">Also values A</span></div>
+    "Traveling with kids, I care most about room size and whether extra beds are available. A table that lays all this out would save me so much time. Auto-recommendation sounds good too, but how would it know I'm traveling with children if it's my first time using the app?"
+  </div>
+  
+  <div class="quote">
+    <div class="name">William A. (Established Mid-Income, 37) <span class="tag tag-c">Prefers C</span></div>
+    "I evaluate hotels on multiple dimensions — location, loyalty program perks, breakfast, executive lounge access. Being able to see all of these laid out in one comparison view is ideal. Whether I trust the AI's pick is another matter, but at least it gives me a starting point."
+  </div>
+  
+  <div class="quote">
+    <div class="name">Susan D. (Frequent Traveler, 36) <span class="tag tag-a">Prefers A</span></div>
+    "I book on this platform constantly — always Marriott or IHG, high floor, king bed. If the system just remembered this and auto-recommended, I wouldn't even need to browse. But if I'm visiting a new destination or trying a different brand, I'd still want to see options."
+  </div>
+  
+  <div class="quote">
+    <div class="name">Leo M. (Gen-Z, 29) <span class="tag tag-b">Prefers B</span> <span class="tag tag-c">Also values C</span></div>
+    "The conversational room selector sounds fun, but what I really care about is whether the final output is comprehensive. If after the conversation it shows me a comparison table — that'd be the best combo."
+  </div>
+</div>
+
+<!-- ═══ Segment Analysis ═══ -->
+<div class="card">
+  <h2>User Segment Analysis</h2>
+  
+  <table class="dims-table">
+    <thead>
+      <tr>
+        <th style="text-align:left;">Segment</th>
+        <th>Share</th>
+        <th>Top Pick</th>
+        <th>Core Need</th>
+        <th>Key Delta</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Established Mid-Income / Young Professionals</td>
+        <td>50%</td>
+        <td><span class="tag tag-c">Option C</span></td>
+        <td style="font-size:0.85rem;">Transparent info + rational decision-making</td>
+        <td style="font-size:0.82rem;color:var(--text-dim);">C scores 1.8 pts above B</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Gen-Z / Explorer Types</td>
+        <td>25%</td>
+        <td><span class="tag tag-b">Option B</span> <span class="tag tag-c">&asymp; Option C</span></td>
+        <td style="font-size:0.85rem;">Guidance + reduced choice anxiety</td>
+        <td style="font-size:0.82rem;color:var(--text-dim);">B and C gap &lt; 0.5 pts</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Frequent Business Travelers / VIP</td>
+        <td>15%</td>
+        <td><span class="tag tag-a">Option A</span></td>
+        <td style="font-size:0.85rem;">Maximum efficiency, zero-tap booking</td>
+        <td style="font-size:0.82rem;color:var(--text-dim);">A leads C by 0.6 pts here</td>
+      </tr>
+      <tr>
+        <td style="text-align:left;font-weight:600;">Family / Older Users</td>
+        <td>10%</td>
+        <td><span class="tag tag-c">Option C</span></td>
+        <td style="font-size:0.85rem;">Comprehensive info + simple interaction</td>
+        <td style="font-size:0.82rem;color:var(--text-dim);">B scores lowest here (clarity = 4)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ Priority Recommendation ═══ -->
+<div class="card">
+  <h2>Delivery Priority Recommendation</h2>
+  
+  <div class="insight-block" style="border-left:3px solid var(--accent2);border-radius:0;">
+    <p style="color:var(--text);font-weight:600;font-size:1rem;">P0 (First Release): Option C — Comparison Matrix + AI Label</p>
+    <p>Broadest user benefit, lowest opinion divergence (lowest SD across all dimensions), moderate development complexity (structured data + labeling logic), works immediately without historical user data (no cold-start issue). Recommended initial coverage: hotel detail pages with 3–6 room types.</p>
+  </div>
+  
+  <div class="insight-block" style="border-left:3px solid var(--orange);border-radius:0;">
+    <p style="color:var(--text);font-weight:600;font-size:1rem;">P1 (Second Phase): Option A — History-Based Recommendation (as C Enhancement)</p>
+    <p>Layer A on top of C: for returning users with booking history, auto-highlight their preferred room type within the comparison matrix. This solves the cold-start problem (C provides the fallback) while preserving efficiency gains for repeat customers. Implementation path: ship C first, then overlay A's labeling logic within C.</p>
+  </div>
+  
+  <div class="insight-block" style="border-left:3px solid var(--text-dim);border-radius:0;">
+    <p style="color:var(--text);font-weight:600;font-size:1rem;">P2 (Long-Term Exploration): Option B — Conversational AI Room Selector</p>
+    <p>Currently carries high user education cost and low perceived urgency. Recommend retaining as an "advanced feature" entry point, initially available as a gray-release to Gen-Z and first-time booking users. Can combine with C: conversation results rendered as a comparison matrix.</p>
+  </div>
+</div>
+
+<!-- ═══ Data Validation Plan ═══ -->
+<div class="card">
+  <h2>Post-Launch Data Validation Plan</h2>
+  <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:16px;">Derived from what 20 virtual users care about: what they focus on &rarr; what we should measure.</p>
+  
+  <h3>Core Tracking Events</h3>
+  <div class="metric-grid">
+    <div class="metric-item">
+      <div class="label">Exposure Events</div>
+      <div class="value">Comparison matrix module impression / AI "Best for You" label impression</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Interaction Events</div>
+      <div class="value">Matrix dimension sort click / AI label click / Room card expansion</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Conversion Events</div>
+      <div class="value">Matrix &rarr; room detail / "Book Now" click / Payment completion</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Efficiency Events</div>
+      <div class="value">Time from page entry to booking completion / Number of room-type switches</div>
+    </div>
+  </div>
+  
+  <h3>Monitoring Metrics Framework</h3>
+  <div class="metric-grid">
+    <div class="metric-item">
+      <div class="label">North Star Metric</div>
+      <div class="value">Hotel booking page &rarr; Payment success conversion rate (Treatment vs Control)</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Process Metrics</div>
+      <div class="value">Matrix module CTR / AI label hit rate / Room selection decision time</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Experience Metrics</div>
+      <div class="value">Post-booking NPS / Cancellation rate (within 7 days) / Return visit rate</div>
+    </div>
+    <div class="metric-item">
+      <div class="label">Guardrail Metrics</div>
+      <div class="value">Page load time / Error rate / Customer service contact rate</div>
+    </div>
+  </div>
+  
+  <h3>Experiment Design Recommendations</h3>
+  <div class="insight-block">
+    <p><strong>Experiment Type:</strong> A/B Test (random traffic split)</p>
+    <p><strong>Minimum Sample:</strong> &ge; 2,000 unique users per arm (based on expected 5% conversion lift, &alpha;=0.05, power=0.8)</p>
+    <p><strong>Observation Period:</strong> 14 days (covers weekend effects + return-visit cycles)</p>
+    <p><strong>Stratification Dimensions:</strong> Historical booking frequency (high/low/new) &times; Device (iOS/Android) &times; Membership tier</p>
+    <p><strong>Analysis Framework:</strong> Day 1–3 immediate conversion delta; Day 7 return-visit retention; Day 14 final report</p>
+  </div>
+</div>
+
+<!-- ═══ Methodology ═══ -->
+<div class="card" style="border-color: var(--border); opacity: 0.85;">
+  <h2 style="color:var(--text-dim);">Methodology Note</h2>
+  <p style="color:var(--text-dim);font-size:0.85rem;">
+    This evaluation is based on real user research scenario library (54,631 de-identified records). Vector retrieval matched scenarios related to "hotel booking / room selection / AI assistant / comparison." From the matched results, 20 diverse virtual user personas were generated. Each user independently evaluated all 3 options across 4 weighted dimensions (Need-Fit 30% + Experience Clarity 25% + Potential Impact 25% + Priority Urgency 20%), with final weighted aggregation for ranking. Scoring extrapolation logic is modeled on the match between user behavioral characteristics and solution properties, not random assignment. Sample composition: Gen-Z (25%), Established Mid-Income (35%), Young Professionals (20%), Family/Older (10%), Other (10%).
+  </p>
+</div>
+
+<div class="footer">
+  Virtual User Skill v2.0 | PRD Calibration Mode | Scenario Library: 54,631 Records | Generated 2026-06-16
+</div>
+
+</div>
+</body>
+</html>
