@@ -20,9 +20,43 @@ This project takes a different route: **vector-search over 54,631 real, anonymiz
 
 ## Demo
 
-![demo](docs/assets/demo_terminal.png)
-
 > Ask a product question in natural language → retrieve matching real-world scenarios → ground your AI personas in actual data.
+
+### Full Demo (5 min)
+
+[![Full Demo](assets/demo/virtual_user_skill_demo_full.gif)](assets/demo/virtual_user_skill_demo_full.mp4)
+
+### 5 Working Modes
+
+**01 · Exploration — 1v1 Interview + Debate**
+
+Generate 8-10 distinct user archetypes, then conduct multi-turn interviews or set up a user debate.
+
+![Exploration Mode](assets/demo/mode_1_exploration.gif)
+
+**02 · PMF Validation — Sean Ellis Scale, ≥40% = Pass**
+
+Stress-test your product hypothesis against real user data with quantified PMF scoring.
+
+![PMF Validation](assets/demo/mode_3_pmf_validation.gif)
+
+**03 · PRD Calibration — 4-Dimension Scoring + Data Plan**
+
+Multi-user critique on your spec with adversarial feedback and data-backed improvement paths.
+
+![PRD Calibration](assets/demo/mode_4_prd_calibration.gif)
+
+**04 · Metrics Voting — Pre-Launch Metric Estimation**
+
+Virtual users estimate click-through rates, retention, and conversion before you ship.
+
+![Metrics Voting](assets/demo/mode_5_metrics_voting.gif)
+
+**05 · Debate — Multi-Perspective Confrontation**
+
+Two user groups argue opposing views on your feature, producing a synthesis report.
+
+![Debate Mode](assets/demo/mode_2_debate.gif)
 
 ---
 
@@ -51,9 +85,10 @@ You'll get 8-10 user types back. Pick which to converse with, and the tool runs 
 | Mode | When to use | What you get |
 |---|---|---|
 | **Exploration** | "What's the user landscape for X?" | 8-10 distinct user types with backgrounds, pain points, emotions |
-| **PMF check** | "Does this need actually exist?" | Stress-test your hypothesis against retrieved scenarios |
-| **PRD review** | "Will users actually use this?" | Multi-user critique on a spec, including dissent |
-| **Design crit** | "What would real users miss?" | Adversarial feedback grounded in past complaints |
+| **PMF Validation** | "Does this need actually exist?" | Sean Ellis scale scoring, confidence grading, risk assessment |
+| **PRD Calibration** | "Will users actually use this?" | 4-dimension scoring + data validation plan |
+| **Metrics Voting** | "What will click-through / retention look like?" | Pre-launch metric estimation from virtual user panels |
+| **Debate** | "What are the opposing views on this feature?" | Multi-perspective confrontation + synthesis report |
 
 ---
 
