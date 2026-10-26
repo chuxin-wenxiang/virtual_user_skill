@@ -1,10 +1,10 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.3` · 效果验证：**待补**
+版本：`2027.0.0-alpha.4` · 验证状态：**8 人探索试跑存在执行偏离，未验证有效性**
 
-把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。没有独立模型调用，不需要 API Key。真实用户档案不随代码发布。
+把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。常规访谈使用宿主 AI；可选套餐适配器使用单独 OAuth 授权，不需要 API Key。真实用户档案不随代码发布。
 
-这是可运行的研究预览版，尚未证明优于标签基线。安装、命令执行和回归检查通过只代表工程功能可用。群体选人、PMF 量化、指标预测、实时更新、人格建模与因果验证均未包含在首版。
+8 人试跑采集到 128 个计划位置的回答，执行偏离后隔离 4 份；124 份进入主分析。结果与限制见[试跑报告](references/pilot-20261026.md)。这是可运行的研究预览版，尚未证明优于标签基线。安装、命令执行和回归检查通过只代表工程功能可用。群体选人、PMF 量化、指标预测、实时更新、人格建模与因果验证均未包含在首版。
 
 ## 安装
 
@@ -79,7 +79,7 @@ python3 scripts/validation_prep.py build --profiles-dir /absolute/path/my-profil
 
 ## 冻结、回答导入与盲评
 
-alpha.3 新增本地工作流工具，先核验完整输入，再生成待填写配置：
+本地工作流工具，先核验完整输入，再生成待填写配置：
 
 ```bash
 python3 scripts/validation_workflow.py audit --input-dir /private/tmp/pilot-inputs
@@ -91,6 +91,10 @@ python3 scripts/validation_workflow.py templates --input-dir /private/tmp/pilot-
 这些命令不调用模型，也不提供自动语义评分；配置模板未完成时不能冻结。导入的服务响应元数据由外部适配器提供，工具未独立核验服务端执行。合成配置仅用于测试，不能标为真实服务结果。
 
 另可运行 `python3 scripts/validation_prep.py audit-selection` 比较选样口径敏感性；它不改变当前正式筛选规则，也不能替代缺失的历史筛选实现。
+
+## 可选套餐试验
+
+使用现有 ChatGPT 套餐执行冻结网格的授权、探针、配置及停止规则见[套餐适配器说明](references/chatgpt-plan.md)。仅在明确资料外发授权后执行；不使用按量 API 付费回退。核心 CLI 保持零依赖，OAuth 校验使用可选 `PyJWT[crypto]`。原始证据、响应和凭证均不公开。
 
 ## 检查
 

@@ -134,19 +134,32 @@ def audit_inputs(input_dir):
 
 def model_config(config):
     fields = {"provider", "model", "revision", "parameters", "seed_policy", "repeat_seeds", "input_token_limit", "synthetic"}
-    require(set(config) == fields, "Model config fields do not match the documented schema; do not include credentials")
+    plan = config.get("provider") == "openai-chatgpt-plan"
+    require(set(config) == fields | ({"transport"} if plan else set()), "Model config fields do not match the documented schema; do not include credentials")
     for key in ("provider", "model", "revision"):
         value = config[key]
         require(isinstance(value, str) and bool(value.strip()) and value.strip().lower() not in ("latest", "default", "auto"),
                 "Model provider, ID and fixed revision must be specified")
     params = config["parameters"]
     require(isinstance(params, dict) and set(params) == {"temperature", "top_p", "max_output_tokens"}, "Invalid parameter schema")
-    for name, low, high in (("temperature", 0, 2), ("top_p", 0, 1)):
-        value = params[name]
-        require(type(value) in (int, float) and math.isfinite(value) and low <= value <= high,
-                "Invalid numeric model parameter")
-    require(params["top_p"] > 0, "top_p must be positive")
-    require(type(params["max_output_tokens"]) is int and 1 <= params["max_output_tokens"] <= 100000, "Invalid output token limit")
+    if plan:
+        require(all(value is None for value in params.values()), "Plan route does not accept temperature/top_p/max_output_tokens")
+        transport = config["transport"]
+        require(isinstance(transport, dict) and transport.get("route") == "https://api.openai.com/v1/responses" and
+                transport.get("store") is False and transport.get("stream") is True and
+                transport.get("billing_policy") == "subscription_only_no_paid_fallback", "Invalid plan-only route policy")
+        require(transport.get("reasoning_effort") == "low" and transport.get("revision_policy") == "provider_alias_exploratory",
+                "Plan pilot must record supported effort and unpinned alias limitation")
+        for field in ("max_input_characters", "max_output_characters", "reported_output_token_guard"):
+            require(type(transport.get(field)) is int and transport[field] > 0, "Invalid local stream guard")
+        require(config["seed_policy"] == "unsupported", "Plan route does not expose a seed parameter")
+    else:
+        for name, low, high in (("temperature", 0, 2), ("top_p", 0, 1)):
+            value = params[name]
+            require(type(value) in (int, float) and math.isfinite(value) and low <= value <= high,
+                    "Invalid numeric model parameter")
+        require(params["top_p"] > 0, "top_p must be positive")
+        require(type(params["max_output_tokens"]) is int and 1 <= params["max_output_tokens"] <= 100000, "Invalid output token limit")
     require(type(config["input_token_limit"]) is int and 1 <= config["input_token_limit"] <= 1000000, "Invalid input token limit")
     require(config["seed_policy"] in ("unsupported", "same_repeat_schedule"), "Invalid seed policy")
     seeds = config["repeat_seeds"]
@@ -233,7 +246,7 @@ def check_common_answer(payload, answer):
     require(inline == declared, "Body citations and declared evidence do not match")
 
 
-def validate_response(run, calls, prompts, response):
+def validate_response(run, calls, prompts, response, *, check_answer=True):
     key = response.get("call_id")
     require(isinstance(key, str) and key in calls, "Response references an unknown call")
     call = calls[key]
@@ -251,9 +264,11 @@ def validate_response(run, calls, prompts, response):
     require("seed" in response and response["seed"] == seed, "Reported seed differs from frozen repeat schedule")
     usage = response.get("usage")
     require(isinstance(usage, dict), "Response usage metadata is required")
-    for field, limit in (("input_tokens", config["input_token_limit"]), ("output_tokens", config["parameters"]["max_output_tokens"])):
+    output_limit = config["transport"]["reported_output_token_guard"] if config["provider"] == "openai-chatgpt-plan" else config["parameters"]["max_output_tokens"]
+    for field, limit in (("input_tokens", config["input_token_limit"]), ("output_tokens", output_limit)):
         require(type(usage.get(field)) is int and 0 <= usage[field] <= limit, "Reported token usage violates frozen limits")
-    check_common_answer(prompts[call["prompt"]]["payload"], response.get("answer"))
+    if check_answer:
+        check_common_answer(prompts[call["prompt"]]["payload"], response.get("answer"))
     return key
 
 
@@ -273,6 +288,22 @@ def responses_for(directory, run, calls, prompts):
         require(path.name == f"{key}.json" and key not in responses, "Duplicate/misnamed response")
         responses[key] = response
     return responses
+
+
+def raw_responses_for(source, run, calls, prompts):
+    """Review every unmodified envelope, including answer-contract failures."""
+    responses, failures = {}, {}
+    for path in Path(source).glob("*.json"):
+        response = au.read_object(path)
+        key = validate_response(run, calls, prompts, response, check_answer=False)
+        require(path.name == f"{key}.json" and key not in responses, "Duplicate/misnamed raw response")
+        require(isinstance(response.get("answer"), dict), "Raw JSON answer object required")
+        try:
+            check_common_answer(prompts[calls[key]["prompt"]]["payload"], response["answer"])
+        except au.InputError as exc:
+            failures[key] = str(exc)
+        responses[key] = response
+    return responses, failures
 
 
 def status(run_dir):
@@ -324,9 +355,9 @@ def audit(input_dir, judge_dir=None):
     return result
 
 
-def blind(run_dir, judge_dir, output_dir, allow_synthetic=False):
+def blind(run_dir, judge_dir, output_dir, allow_synthetic=False, raw_response_dir=None):
     directory, run, calls, prompts = load_run(run_dir)
-    responses = responses_for(directory, run, calls, prompts)
+    responses, failures = raw_responses_for(raw_response_dir, run, calls, prompts) if raw_response_dir else (responses_for(directory, run, calls, prompts), {})
     require(set(responses) == set(calls), "All planned responses are required before blind export")
     require(allow_synthetic or not any(r["origin"] == "synthetic_test" for r in responses.values()), "Synthetic answers require explicit demo export")
     judge_root, judges = load_judges(judge_dir, run)
@@ -346,6 +377,7 @@ def blind(run_dir, judge_dir, output_dir, allow_synthetic=False):
         history = prompts[f'{call["case"]}/{memory_label}/{call["question_id"]}.txt']["payload"]["user_context"]["evidence"]
         reference = {k: hidden["holdout"][k] for k in ("date", "industry", "score", "text")}
         tasks.append({"review_id": identity, "question_id": call["question_id"], "question": payload["question"],
+                      "mechanical_check": {"passed": key not in failures, "error": failures.get(key)},
                       "answer": response["answer"], "provided_evidence": payload["user_context"]["evidence"],
                       "reference_history": history, "hidden_reference": reference})
         key_rows[identity] = {"case": call["case"], "condition": hidden["condition_map"][call["condition"]],
@@ -373,6 +405,9 @@ def blind(run_dir, judge_dir, output_dir, allow_synthetic=False):
     private_key = {"run_sha256": run["run_sha256"], "responses_sha256": digest(responses),
                    "review_pack_sha256": pack_hash, "review_pack_file": str(target / "review-pack.json"),
                    "reviews": key_rows, "repeat_groups": repeat_groups}
+    if raw_response_dir:
+        private_key["raw_response_dir"] = str(Path(raw_response_dir).resolve())
+        private_key["mechanical_failures"] = failures
     private_key["key_sha256"] = digest(private_key)
     save(directory / "review-key.json", private_key)
     return {"ok": True, "review_tasks": len(tasks), "repeat_groups": len(repeat_groups), "directory": str(target)}
@@ -400,7 +435,7 @@ def summarize(run_dir, scores_file):
     key = au.read_object(directory / "review-key.json")
     require(key.get("run_sha256") == run["run_sha256"] and key.get("key_sha256") ==
             digest({k: v for k, v in key.items() if k != "key_sha256"}), "Private review key checksum mismatch")
-    responses = responses_for(directory, run, calls, prompts)
+    responses = raw_responses_for(key["raw_response_dir"], run, calls, prompts)[0] if key.get("raw_response_dir") else responses_for(directory, run, calls, prompts)
     require(digest(responses) == key.get("responses_sha256"), "Responses changed after blind export")
     pack = au.read_object(key["review_pack_file"])
     actual_hash = digest({"run_sha256": run["run_sha256"], "tasks": pack["tasks"], "repeat_groups": pack["repeat_groups"]})
@@ -411,7 +446,7 @@ def summarize(run_dir, scores_file):
     scores = au.read_object(scores_file)
     require(scores.get("review_pack_sha256") == actual_hash, "Scores belong to another review pack")
     require(isinstance(scores.get("reviewer"), str) and scores["reviewer"].strip(), "Reviewer must be recorded")
-    require(scores.get("origin") in ("human_review", "synthetic_test"), "Score origin must be explicit")
+    require(scores.get("origin") in ("human_review", "assistant_review", "synthetic_test"), "Score origin must be explicit")
     rows = scores.get("scores")
     require(isinstance(rows, list), "scores must be a list")
     seen, graded, missing = set(), {metric: {} for metric in METRICS}, 0
@@ -466,13 +501,15 @@ def summarize(run_dir, scores_file):
     return {"status": "partial_scores" if missing else "scored_exploratory", "unscored_items": missing,
             "metrics": metrics, "score_origin": scores["origin"], "synthetic_present": pack["synthetic_present"],
             "provider_verified": False, "automatic_model_calls": 0,
+            "answer_contract_failures": len(key.get("mechanical_failures", {})),
+            "reviewed_answers": len(responses),
             "interpretation": "User-paired exploratory summary; lower fabrication rate is better; no automatic efficacy verdict"}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("audit", "templates", "freeze", "ingest", "status", "blind", "summarize"))
-    for field in ("input-dir", "output-dir", "run-dir", "judge-dir", "config", "review", "response", "scores", "output"):
+    for field in ("input-dir", "output-dir", "run-dir", "judge-dir", "config", "review", "response", "scores", "output", "raw-response-dir"):
         parser.add_argument(f"--{field}")
     parser.add_argument("--allow-synthetic", action="store_true")
     args = parser.parse_args()
@@ -493,7 +530,7 @@ def main():
         elif args.command == "status":
             result = status(args.run_dir)
         elif args.command == "blind":
-            result = blind(args.run_dir, args.judge_dir, args.output_dir, args.allow_synthetic)
+            result = blind(args.run_dir, args.judge_dir, args.output_dir, args.allow_synthetic, args.raw_response_dir)
         else:
             result = summarize(args.run_dir, args.scores)
         au.write_new(args.output, json.dumps(result, ensure_ascii=False, indent=2) + "\n")

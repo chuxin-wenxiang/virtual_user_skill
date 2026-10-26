@@ -18,3 +18,10 @@ config.local.*
 *.csv
 *.tsv
 *.log
+
+# Optional plan credentials and trial evidence stay private.
+**/credentials.json
+/chatgpt-plan-auth/
+/attempts/
+/provider-events/
+/incoming/

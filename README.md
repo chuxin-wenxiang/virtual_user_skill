@@ -2,7 +2,7 @@
 
 ## v2027 preview
 
-The first individual-memory preview is available in [skills/authentic-user-v2027](skills/authentic-user-v2027/README.md), version `2027.0.0-alpha.3`. It includes a local evidence CLI, exclusive time cutoffs, source citations, capability fallback, and synthetic examples. It uses the host AI rather than an embedded model API. Real user archives are not distributed. **Simulation-effect experiments are pending.** The existing implementation below remains available.
+[Individual-memory Skill](skills/authentic-user-v2027/README.md), version `2027.0.0-alpha.4`, includes a local evidence CLI and an optional OAuth adapter for an authorized ChatGPT plan. No real archives or credentials are distributed. An 8-user pilot collected all 128 grid positions, but a recovery race overwrote one output; four paired answers were quarantined and 124 remain in the exploratory analysis. **Execution integrity did not pass and effectiveness is unvalidated.** Read the [aggregate pilot report](skills/authentic-user-v2027/references/pilot-20261026.md) for denominators, assistant-review limits, and fixes. The existing implementation below remains available.
 
 > **AI virtual users powered by 54k+ real, anonymized user-research scenarios.**
 > Stop interviewing prompt-engineered personas. Start talking to ones built from actual data.
