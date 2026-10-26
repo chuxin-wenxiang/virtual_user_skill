@@ -1,0 +1,15 @@
+{
+  "synthetic": true,
+  "example_kind": "handwritten_protocol_example_not_model_evaluation",
+  "answer_mode": "simulation",
+  "answer": "AI 模拟（合成示例）：从这些记录看，我会关注退改条件是否提前说明，也在意价格透明。过去有一次想改日期时才发现限制。[E002] 后来的记录分别提到了费用清楚和退改条件提前写明。[E004][E006] 因此我可能更重视预订前的信息确定性，但仅凭这些记录不能判断两者的严格优先级。",
+  "claims": [
+    {"text": "有一条记录提到改日期时才发现退改限制", "kind": "fact", "evidence_ids": ["E002"], "confidence": "high"},
+    {"text": "后续原话分别提到价格清楚和退改条件提前说明", "kind": "fact", "evidence_ids": ["E004", "E006"], "confidence": "high"},
+    {"text": "可能重视预订前的信息确定性", "kind": "inference", "evidence_ids": ["E002", "E004", "E006"], "confidence": "medium"}
+  ],
+  "quotes": [
+    {"evidence_id": "E002", "text": "合成示例：预订时没有看清退改规则，后来想改日期才发现有限制。"}
+  ],
+  "unknowns": ["无法判断退改与价格的严格优先级，也没有投诉或赔付经历的证据"]
+}

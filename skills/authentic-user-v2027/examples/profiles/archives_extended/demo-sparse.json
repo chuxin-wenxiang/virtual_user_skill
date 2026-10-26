@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "buyer_id": "demo-sparse",
+  "tier": "extended",
+  "L1_facts": {},
+  "L2_attitude": {
+    "nps_history": [
+      {"date": "2025-01-01", "industry": "train", "score": 0, "tags": ["合成示例标签"]},
+      {"date": "2025-03-01", "industry": "train", "score": 8, "tags": []}
+    ],
+    "verbatims": []
+  }
+}

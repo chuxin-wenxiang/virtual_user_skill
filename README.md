@@ -1,5 +1,9 @@
 # virtual_user_skill
 
+## v2027 preview
+
+The first individual-memory preview is available in [skills/authentic-user-v2027](skills/authentic-user-v2027/README.md), version `2027.0.0-alpha.1`. It includes a local evidence CLI, exclusive time cutoffs, source citations, capability fallback, and synthetic examples. It uses the host AI rather than an embedded model API. Real user archives are not distributed. **Simulation-effect experiments are pending.** The existing implementation below remains available.
+
 > **AI virtual users powered by 54k+ real, anonymized user-research scenarios.**
 > Stop interviewing prompt-engineered personas. Start talking to ones built from actual data.
 

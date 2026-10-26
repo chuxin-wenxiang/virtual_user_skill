@@ -1,0 +1,25 @@
+{
+  "synthetic": true,
+  "buyer_id": "demo-rich",
+  "version": "synthetic-demo-only",
+  "L1_facts": {
+    "demographics": {"buyer_nick": "合成用户，不代表真人", "age": 99}
+  },
+  "L2_attitude": {
+    "nps_history": [
+      {"date": "2025-01-10 10:00:00", "industry": "domestic_hotel", "score": 6, "tags": ["退改规则"]},
+      {"date": "2025-05-20 10:00:00", "industry": "domestic_hotel", "score": 8, "tags": ["价格透明"]},
+      {"date": "2025-09-25 10:00:00", "industry": "domestic_hotel", "score": 9, "tags": ["退改规则清晰"]},
+      {"date": "2026-02-01 10:00:00", "industry": "domestic_hotel", "score": 2, "tags": ["HIDDEN_DEMO_TAG"]}
+    ],
+    "verbatims": [
+      {"date": "2025-01-10 10:00:00", "industry": "domestic_hotel", "score": 6, "text": "合成示例：预订时没有看清退改规则，后来想改日期才发现有限制。"},
+      {"date": "2025-05-20 10:00:00", "industry": "domestic_hotel", "score": 8, "text": "合成示例：价格列得清楚，没有到付款时才冒出来的费用。"},
+      {"date": "2025-09-25 10:00:00", "industry": "domestic_hotel", "score": 9, "text": "合成示例：这次退改条件提前写明白，我比较放心。"},
+      {"date": "2026-02-01 10:00:00", "industry": "domestic_hotel", "score": 2, "text": "HIDDEN_DEMO_FUTURE_ANSWER：这条合成记录只用来检查时间过滤。"}
+    ],
+    "trajectory": {"avg_score": 1, "note": "DO_NOT_USE_FULL_HISTORY_SUMMARY"}
+  },
+  "L3_personality": {"personality_summary": "DO_NOT_USE_SYNTHETIC_PERSONALITY"},
+  "L4_causal_narrative": {"narrative_summary": "HIDDEN_DEMO_FUTURE_ANSWER"}
+}

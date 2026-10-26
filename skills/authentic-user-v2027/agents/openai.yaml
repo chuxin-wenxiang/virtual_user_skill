@@ -1,0 +1,4 @@
+interface:
+  display_name: "全真用户 v2027 预览版"
+  short_description: "基于本地真实用户历史记忆生成附证据的模拟回答，支持时间边界与未知降级"
+  default_prompt: "使用 $authentic-user-v2027，根据指定用户的本地历史证据回答问题，并标注引用、推断与未知。"
