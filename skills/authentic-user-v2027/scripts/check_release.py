@@ -14,6 +14,7 @@ PUBLIC_FILES = {
     "examples/profiles/archives_v2027/demo-rich.json",
     "examples/profiles/archives_extended/demo-sparse.json", "examples/answer-demo.json",
     "tests/test_authentic_user.py", "scripts/validation_prep.py", "tests/test_validation_prep.py",
+    "scripts/validation_workflow.py", "tests/test_validation_workflow.py", "examples/model-config.synthetic.json",
 }
 LOCAL_ONLY = {".git", "__pycache__", ".venv", "outputs", "dist"}
 

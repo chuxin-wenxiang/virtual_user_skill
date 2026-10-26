@@ -85,6 +85,14 @@ class ValidationPreparationTests(unittest.TestCase):
         self.assertTrue(all(set(row) == {"id", "kind", "industry", "tag", "count"} for row in baseline))
         self.assertNotIn("HIDDEN_DEMO", au.canonical(baseline))
 
+    def test_selection_audit_does_not_change_default_candidates(self):
+        before, _ = vp.scan(self.profiles)
+        result = vp.audit_selection(self.profiles)
+        after, _ = vp.scan(self.profiles)
+        self.assertEqual(before, after)
+        self.assertEqual(result["candidate_counts"]["visible_only"], len(before))
+        self.assertFalse(result["historical_implementation_available"])
+
 
 if __name__ == "__main__":
     unittest.main()

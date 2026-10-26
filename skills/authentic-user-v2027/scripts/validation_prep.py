@@ -52,7 +52,9 @@ def segment(score):
     return "promoter" if score >= 9 else "passive" if score >= 7 else "detractor"
 
 
-def candidate_from(archive, buyer_id, include_zero=False):
+def candidate_from(archive, buyer_id, include_zero=False, span_mode="visible_only"):
+    if span_mode not in ("visible_only", "through_holdout"):
+        raise au.InputError("Unsupported span sensitivity mode")
     records = au.records_from(archive)
     if not include_zero:
         records = [r for r in records if r["score"] != 0]
@@ -65,7 +67,8 @@ def candidate_from(archive, buyer_id, include_zero=False):
         related_quotes = [r for r in verbatims if r["industry"] == hidden["industry"]]
         if len(surveys) < 4 or len(verbatims) < 3 or len(related) < 2 or len(related_quotes) < 2:
             continue
-        span = (au.date_value(past[-1]["date"]) - au.date_value(past[0]["date"])).days
+        end = past[-1]["date"] if span_mode == "visible_only" else hidden["date"]
+        span = (au.date_value(end) - au.date_value(past[0]["date"])).days
         if span < 180:
             continue
         previous, target = segment(related[-1]["score"]), segment(hidden["score"])
@@ -81,6 +84,11 @@ def candidate_from(archive, buyer_id, include_zero=False):
             groups.append("complex")
         return {"buyer_id": buyer_id, "cutoff": hidden["date"], "industry": hidden["industry"],
                 "holdout": hidden, "groups": groups, "hidden_segment": target,
+                "prior_segment_sensitivity": {
+                    "last_same_industry": previous,
+                    "last_all_industries": segment(surveys[-1]["score"]),
+                    "mean_same_industry": segment(sum(r["score"] for r in related) / len(related)),
+                    "mean_all_industries": segment(sum(r["score"] for r in surveys) / len(surveys))},
                 "visible_counts": {"surveys": len(surveys), "verbatims": len(verbatims), "span_days": span}}
     return None
 
@@ -103,6 +111,27 @@ def scan(root, include_zero=False):
                         "eligible_groups": dict(Counter(group for c in candidates for group in c["groups"])),
                         "hidden_segments": dict(Counter(c["hidden_segment"] for c in candidates)),
                         "group_counts_overlap": True, "pilot_excludes_zero": not include_zero}
+
+
+def audit_selection(root, include_zero=False):
+    core = Path(root) / "archives_v2027"
+    if not core.is_dir():
+        raise au.InputError("Core archives directory is required")
+    counts, transitions, invalid = Counter(), {mode: Counter() for mode in ("visible_only", "through_holdout")}, 0
+    for path in sorted(core.glob("*.json")):
+        try:
+            archive, _ = au.load_archive(root, path.stem)
+            for mode in transitions:
+                candidate = candidate_from(archive, path.stem, include_zero, mode)
+                if candidate:
+                    counts[mode] += 1
+                    for basis, prior in candidate["prior_segment_sensitivity"].items():
+                        transitions[mode][basis] += prior != candidate["hidden_segment"]
+        except au.InputError:
+            invalid += 1
+    return {"candidate_counts": dict(counts), "transition_sensitivity": {k: dict(v) for k, v in transitions.items()},
+            "invalid_archives": invalid, "historical_implementation_available": False,
+            "scope": "Sensitivity diagnostic only; frozen selection remains visible-only and last-same-industry"}
 
 
 def choose(candidates, per_group=2):
@@ -208,12 +237,17 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
     au.write_new(str(inputs / "manifest.json"), json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     au.write_new(str(judges / "selection.json"), json.dumps({"pool_summary": summary, "cases": case_map,
                                                            "protocol_sha256": protocol_sha}, ensure_ascii=False, indent=2) + "\n")
+    judge_manifest = {"inputs_manifest_sha256": digest(manifest), "protocol_sha256": protocol_sha,
+                      "case_files": [{"path": f'{row["case"]}.json',
+                                      "sha256": hashlib.sha256((judges / f'{row["case"]}.json').read_bytes()).hexdigest()}
+                                     for row in case_map]}
+    au.write_new(str(judges / "manifest.json"), json.dumps(judge_manifest, ensure_ascii=False, indent=2) + "\n")
     return {key: manifest[key] for key in ("status", "users", "unique_prompts", "planned_calls", "model_calls_completed")} | {"pool_summary": summary}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("scan", "build"))
+    parser.add_argument("command", choices=("scan", "audit-selection", "build"))
     parser.add_argument("--profiles-dir")
     parser.add_argument("--include-zero", action="store_true", help="Include legal NPS zero scores in pilot selection")
     parser.add_argument("--input-dir")
@@ -223,7 +257,9 @@ def main():
     args = parser.parse_args()
     try:
         root = au.resolve_root(args.profiles_dir)
-        if args.command == "scan":
+        if args.command == "audit-selection":
+            result = audit_selection(root, args.include_zero)
+        elif args.command == "scan":
             _, result = scan(root, args.include_zero)
         else:
             if not args.input_dir or not args.judge_dir:

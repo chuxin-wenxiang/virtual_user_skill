@@ -1,6 +1,6 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.2` · 效果验证：**待补**
+版本：`2027.0.0-alpha.3` · 效果验证：**待补**
 
 把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。没有独立模型调用，不需要 API Key。真实用户档案不随代码发布。
 
@@ -76,6 +76,21 @@ python3 scripts/validation_prep.py build --profiles-dir /absolute/path/my-profil
 默认按四组各 2 人选取互斥的 8 人，生成四类题、两种条件的 64 份提示词和计划重复 2 次的 128 条调用清单。实际是否能满足配额取决于本地数据；不够时会报错，不补造样本。材料保持本地，输入目录和评分隐藏材料目录相互分离。
 
 本工具比较“同一批历史标签”与“同一可见历史的个体记忆”，不冒称复现旧生产 Agent。模型版本与参数仍需在生成前冻结，未知题需先核实可见证据；`model_calls_completed=0` 表示只准备了材料。详见 [验证流程与口径](references/validation.md)。
+
+## 冻结、回答导入与盲评
+
+alpha.3 新增本地工作流工具，先核验完整输入，再生成待填写配置：
+
+```bash
+python3 scripts/validation_workflow.py audit --input-dir /private/tmp/pilot-inputs
+python3 scripts/validation_workflow.py templates --input-dir /private/tmp/pilot-inputs --output-dir /private/tmp/pilot-setup
+```
+
+按实际情况填写固定模型版本、共同参数和可见证据审阅记录，再用 `freeze` 建立运行记录。外部模型实际生成后，通过 `ingest` 导入与运行、提示词、模型配置绑定的回答；全部导入后，`blind` 生成条件标签遮蔽的评审包，`summarize` 对已评分结果按用户做配对汇总。完整命令和回答信封格式见 [验证流程](references/validation.md)。
+
+这些命令不调用模型，也不提供自动语义评分；配置模板未完成时不能冻结。导入的服务响应元数据由外部适配器提供，工具未独立核验服务端执行。合成配置仅用于测试，不能标为真实服务结果。
+
+另可运行 `python3 scripts/validation_prep.py audit-selection` 比较选样口径敏感性；它不改变当前正式筛选规则，也不能替代缺失的历史筛选实现。
 
 ## 检查
 

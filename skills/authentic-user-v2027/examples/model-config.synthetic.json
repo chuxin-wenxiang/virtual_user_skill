@@ -1,0 +1,10 @@
+{
+  "synthetic": true,
+  "provider": "synthetic-test-only",
+  "model": "synthetic-model",
+  "revision": "synthetic-v1",
+  "parameters": {"temperature": 0, "top_p": 1, "max_output_tokens": 800},
+  "seed_policy": "unsupported",
+  "repeat_seeds": null,
+  "input_token_limit": 16000
+}

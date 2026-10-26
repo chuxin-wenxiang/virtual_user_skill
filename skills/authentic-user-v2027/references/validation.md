@@ -48,3 +48,80 @@ pilot-judge/
 5. 隐藏条件标识后评分，对争议内容人工复核；以用户做配对比较，不将重复调用当成独立用户。
 
 工具不提供自动语义评分或模型连接器。完成本次准备只能表述为“验证材料已形成”；只有实际模型回答、评分及失败分析齐备后，才能讨论效果增益。
+
+## alpha.3 实验工作流
+
+所有目录仍放在本地私有位置，以下路径只是示例。
+
+```bash
+python3 scripts/validation_workflow.py audit --input-dir /private/tmp/pilot-inputs
+python3 scripts/validation_workflow.py templates --input-dir /private/tmp/pilot-inputs --output-dir /private/tmp/pilot-setup
+python3 scripts/validation_workflow.py freeze --input-dir /private/tmp/pilot-inputs --config /private/tmp/pilot-setup/model-config.json --review /private/tmp/pilot-setup/visible-review.json --output-dir /private/tmp/pilot-run
+```
+
+`templates` 生成的两个文件带 `.template.json` 后缀。根据真实情况填写另存为上述文件后才能冻结，不能仅改后缀绕过缺失信息：
+
+- 模型配置：`provider`、固定 `model` 和 `revision`；共同 `parameters` 包含 `temperature`、`top_p`、`max_output_tokens`；共同 `input_token_limit`；`seed_policy` 为 `unsupported` 或 `same_repeat_schedule`。前者 `repeat_seeds=null`，后者提供与重复次数等长的整数种子表，两个条件对同一 repeat 使用同一值。`synthetic=false` 才能导入真实服务来源声明。不要放入密钥。
+- 可见证据审阅：保留输入清单校验值，记录实际 `reviewer`；逐案例核验 Q4 后写 `status=reviewed`，并列出 `unsupported_parts`。若可见证据已充分覆盖题目，应改协议重建整批，而不是虚填未知范围。
+
+输入核验检查逐文件字节校验、完整调用网格、共同指令和同源标签。`audit` 额外传入 `--judge-dir` 时，会校验隐藏材料清单和严格时间截止点；这属于独立审计步骤，不能让生成模型读取 judge。冻结不调用模型，不凭空锁定一个未选择的模型，也不会把未审阅状态改为已完成。
+
+文件分离不等于进程沙箱。生成阶段应只把指定提示词交给模型，不开放 judge 或同工作目录的文件工具访问。盲评阶段才能读隐藏参考答案。
+
+### 回答导入
+
+外部适配器执行后，每次回答保存一个信封，字段如下。占位内容必须取自真实运行和服务记录；这不是可以直接导入的结果示例。
+
+```json
+{
+  "call_id": "S001-X-Q1-r1",
+  "run_sha256": "FROM_RUN_JSON",
+  "prompt_sha256": "FROM_FROZEN_CALL",
+  "model_config_sha256": "FROM_RUN_JSON",
+  "origin": "provider_response",
+  "provider_request_id": "FROM_PROVIDER",
+  "model": "EXACT_FROZEN_MODEL",
+  "revision": "EXACT_FROZEN_REVISION",
+  "seed": null,
+  "usage": {"input_tokens": 100, "output_tokens": 50},
+  "answer": {"answer": "实际回答及引用", "direction": "unknown", "claims": [], "unknowns": ["实际未知项"]}
+}
+```
+
+```bash
+python3 scripts/validation_workflow.py ingest --run-dir /private/tmp/pilot-run --response /private/tmp/provider-response.json
+python3 scripts/validation_workflow.py status --run-dir /private/tmp/pilot-run
+```
+
+工具核对运行、提示词、配置、回报的模型版本、种子和 token 用量，以及引用结构；拒绝重复写入。它不独立连接服务端确认请求，`provider_verified=false` 始终保留。`provider_response_imports` 是外部声明来源的导入数，不能直接写成“已独立核验的模型调用数”。语义支持仍需评审。
+
+合成配置与 `origin=synthetic_test` 只用于工程测试；冻结合成配置后不能声明真实服务执行。仓库的合成全流程检查不计入真实研究样本或效果结果。
+
+### 评审包与评分
+
+```bash
+python3 scripts/validation_workflow.py blind --run-dir /private/tmp/pilot-run --judge-dir /private/tmp/pilot-judge --output-dir /private/tmp/pilot-review
+python3 scripts/validation_workflow.py summarize --run-dir /private/tmp/pilot-run --scores /private/tmp/pilot-review/scores.json --output /private/tmp/pilot-summary.json
+```
+
+默认必须收齐回答；含合成回答时须显式使用 `--allow-synthetic` 演练，输出继续保留合成标记。judge 目录需有 alpha.3 生成的文件校验清单，旧材料建议用同一规则重建，不手工补造校验来源。
+
+评审目录包含 `review-pack.json`、每条回答对应的 `tasks/B*.json`、重复一致性分组和 `scores.template.json`。评审人只拿此目录；X/Y 对应关系、真实 ID 和来源对应表留在私有运行目录。条件标签被遮蔽，资料内容深浅仍可能让评审人猜到条件，不能宣称完全双盲。
+
+评分按预先冻结的七个指标记录：
+
+- `fact_accuracy`：关键事实中有参考历史支持的比例；没有事实断言时标 NA 并解释。
+- `traceability`：关键判断的引用可追溯且支持该判断的比例；只出现 ID 不算支持。
+- `attitude_direction`：只评 Q2，方向与隐藏记录一致为 1，否则为 0。
+- `theme_overlap`：只评 Q3，理由主题按 0/1/2 评分归一为 0/0.5/1。
+- `fabricated_experience_rate`：发现无依据的具体经历为 1，否则为 0；越低越好。
+- `unknown_restraint`：只评 Q4，对已审阅的未知部分克制且不补写为 1，否则为 0。
+- `repeat_consistency`：在重复分组中评核心事实、态度与理由的一致程度，归一到 0—1；单次回答不能代替重复一致性评审。
+
+实际评分写 `status=scored`，不适用项保留 null 并说明原因。模板或未评分条目不会变成 0 分，也不会被当作完整结果。填写实际评审人和来源，另存为 `scores.json`。
+
+汇总先在每个用户、每个条件内平均适用评分，再做用户配对差异，并以用户做固定种子的 bootstrap。报告逐指标给出有效配对人数、均值、百分点差和探索性区间；不将重复回答算作独立用户。不完整评分明确标记 `partial_scores`，小样本结果也不自动给出“方法成立”结论。
+
+### 口径敏感性
+
+`validation_prep.py audit-selection` 对比“仅可见历史跨度”与“包含隐藏记录间隔的跨度”，以及同业最近分数、全行业最近分数、同业均分、全行业均分四种参照。替代口径仅作诊断，不进入默认选样；不能为了配额放宽原规则。

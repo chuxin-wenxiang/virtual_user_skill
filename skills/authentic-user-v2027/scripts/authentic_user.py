@@ -14,8 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.2"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", VERSION}
+VERSION = "2027.0.0-alpha.3"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -462,7 +462,7 @@ def write_new(path, text):
     target.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents accidentally overwriting another evidence/answer package.
     try:
-        with open(target, "x", encoding="utf-8", opener=lambda p, flags: os.open(p, flags, 0o600)) as handle:
+        with open(target, "x", encoding="utf-8", newline="\n", opener=lambda p, flags: os.open(p, flags, 0o600)) as handle:
             handle.write(text)
     except FileExistsError as exc:
         raise InputError("Output already exists; choose a new output filename") from exc

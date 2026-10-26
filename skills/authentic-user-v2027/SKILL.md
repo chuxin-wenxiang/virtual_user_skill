@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "使用全真用户 v2027 的本地个体历史档案整理证据、模拟访谈或回答用户视角问题，附原话引用、推断与未知边界。适用于明确要求 v2027、个体记忆驱动模拟或按真实用户 ID 访谈；需要本地授权档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.2"
+  version: "2027.0.0-alpha.3"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -55,3 +55,5 @@ python3 scripts/authentic_user.py check-answer --bundle /tmp/user-memory.json --
 ## 小样本验证准备
 
 需要准备回测材料时读 [验证流程](references/validation.md)，使用 `scripts/validation_prep.py`。该工具生成两种信息条件的输入、隐藏答案和调用清单，不调用模型。先冻结模型及参数、检查未知题覆盖范围，再执行生成；生成时只访问 inputs，不能读取 judge。实验结果必须包含真实回答、评分和失败案例；不把“计划调用数”或“已生成输入”写成已完成实验。
+
+alpha.3 提供 `scripts/validation_workflow.py`：`audit` 核验输入，`templates` 生成未完成配置，`freeze` 固定同一模型和已核验的未知题范围，`ingest` 导入外部执行回答，`blind` 导出遮蔽条件标签的评审包，`summarize` 按用户做配对汇总。没有自动模型连接器。不得为推进流程伪填模型版本、请求 ID、审阅状态或评分；合成演练保留 `synthetic_test` 标记。导入服务回答不等于独立确认服务实际执行，汇总也不自动判定方法有效。
