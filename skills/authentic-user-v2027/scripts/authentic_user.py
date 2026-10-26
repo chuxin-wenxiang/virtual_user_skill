@@ -14,7 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.1"
+VERSION = "2027.0.0-alpha.2"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -38,8 +39,20 @@ def read_object(path):
     try:
         if path.stat().st_size > 8 * 1024 * 1024:
             raise InputError("JSON file exceeds the 8 MiB per-file limit")
-        obj = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        def object_pairs(pairs):
+            obj = {}
+            for key, value in pairs:
+                if key in obj:
+                    raise InputError("Duplicate JSON object keys are not supported")
+                obj[key] = value
+            return obj
+
+        def invalid_constant(value):
+            raise InputError("Non-finite JSON constants are not supported")
+
+        obj = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs,
+                         parse_constant=invalid_constant)
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise InputError(f"Cannot read JSON: {path.name} ({type(exc).__name__})") from exc
     if not isinstance(obj, dict):
         raise InputError("JSON root must be an object")
@@ -77,7 +90,7 @@ def resolve_root(value=None):
 
 
 def load_archive(root, buyer_id):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", buyer_id):
+    if not isinstance(buyer_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", buyer_id):
         raise InputError("Invalid buyer ID; use letters, numbers, underscore or hyphen")
     root = Path(root).resolve()
     for directory, tier in (("archives_v2027", "core"), ("archives_extended", "extended")):
@@ -212,9 +225,12 @@ def bundle_digest(bundle):
 def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24, max_chars=40000):
     if not isinstance(question, str) or not question.strip() or len(question) > 4000:
         raise InputError("Question must contain 1–4000 characters")
-    if industry is not None and industry not in INDUSTRIES:
+    if isinstance(buyer_id, int) and not isinstance(buyer_id, bool):
+        buyer_id = str(buyer_id)
+    if industry is not None and (not isinstance(industry, str) or industry not in INDUSTRIES):
         raise InputError("Unsupported industry")
-    if not 1 <= max_records <= 100 or not 500 <= max_chars <= 200000:
+    if (type(max_records) is not int or type(max_chars) is not int or
+            not 1 <= max_records <= 100 or not 500 <= max_chars <= 200000):
         raise InputError("max_records must be 1–100 and max_chars 500–200000")
     boundary = date_value(cutoff) if cutoff else None
     archive, tier = load_archive(root, buyer_id)
@@ -243,30 +259,80 @@ def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24
 
 
 def validate_bundle(bundle):
-    if bundle.get("schema_version") != 1 or bundle.get("skill_version") != VERSION:
+    if not isinstance(bundle, dict):
+        raise InputError("Bundle must be an object")
+    if (type(bundle.get("schema_version")) is not int or bundle["schema_version"] != 1 or
+            not isinstance(bundle.get("skill_version"), str) or
+            bundle["skill_version"] not in SUPPORTED_BUNDLE_VERSIONS):
         raise InputError("Unsupported bundle schema or skill version")
-    if bundle.get("bundle_sha256") != bundle_digest(bundle):
+    try:
+        digest = bundle_digest(bundle)
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise InputError("Bundle contains unsupported JSON values") from exc
+    if bundle.get("bundle_sha256") != digest:
         raise InputError("Bundle checksum mismatch; regenerate from source")
-    if bundle.get("capability", {}).get("level") not in CAPABILITIES:
+    capability_value = bundle.get("capability")
+    if (not isinstance(capability_value, dict) or not isinstance(capability_value.get("level"), str) or
+            capability_value["level"] not in CAPABILITIES):
         raise InputError("Invalid capability level")
+    if bundle.get("source_tier") not in ("core", "extended"):
+        raise InputError("Invalid source tier")
+    if not isinstance(bundle.get("question"), str) or not 1 <= len(bundle["question"].strip()) <= 4000:
+        raise InputError("Invalid question")
+    industry = bundle.get("industry_filter")
+    if industry is not None and (not isinstance(industry, str) or industry not in INDUSTRIES):
+        raise InputError("Invalid industry filter")
     boundary = date_value(bundle["cutoff_exclusive"]) if bundle.get("cutoff_exclusive") else None
     evidence = bundle.get("evidence")
-    if not isinstance(evidence, list):
-        raise InputError("Evidence must be a list")
+    if not isinstance(evidence, list) or len(evidence) > 100:
+        raise InputError("Evidence must be a list of at most 100 records")
     ids = set()
+    fingerprints = set()
     for row in evidence:
-        if not isinstance(row, dict) or not re.fullmatch(r"E\d{3}", str(row.get("id", ""))):
+        if (not isinstance(row, dict) or not isinstance(row.get("id"), str) or
+                not re.fullmatch(r"E\d{3}", row["id"])):
             raise InputError("Invalid evidence record")
         if row["id"] in ids:
             raise InputError("Duplicate evidence ID")
         ids.add(row["id"])
-        if row.get("kind") not in {"survey", "verbatim"} or row.get("industry") not in INDUSTRIES:
+        if row.get("kind") not in ("survey", "verbatim") or not isinstance(row.get("industry"), str) or row["industry"] not in INDUSTRIES:
             raise InputError("Invalid evidence kind or industry")
+        score = row.get("score")
+        if score is not None and (type(score) is not int or not 0 <= score <= 10):
+            raise InputError("Evidence score must be null or an integer from 0 to 10")
+        if row.get("industry_cn") != INDUSTRIES[row["industry"]]:
+            raise InputError("Industry name does not match industry code")
+        if row["kind"] == "verbatim":
+            if not isinstance(row.get("text"), str) or not row["text"].strip():
+                raise InputError("Verbatim evidence must contain text")
+            allowed_source = ("L2_attitude.verbatims",)
+            content_fields = {"text"}
+        else:
+            if not isinstance(row.get("tags"), list) or any(not isinstance(tag, str) or not tag.strip() for tag in row["tags"]):
+                raise InputError("Survey tags must be a list of non-empty strings")
+            allowed_source = ("L2_attitude.nps_history", "L1_facts.nps_history")
+            content_fields = {"tags"}
+        if row.get("source_field") not in allowed_source:
+            raise InputError("Invalid source field")
+        allowed_fields = {"id", "kind", "date", "industry", "industry_cn", "score",
+                          "source_field", "source_record_sha256"} | content_fields
+        if set(row) != allowed_fields:
+            raise InputError("Evidence contains missing or unsupported fields")
+        source = {key: value for key, value in row.items()
+                  if key not in {"id", "source_field", "source_record_sha256"}}
+        fingerprint = hashlib.sha256(canonical(source).encode()).hexdigest()
+        if fingerprint != row["source_record_sha256"]:
+            raise InputError("Evidence source record checksum mismatch")
+        if fingerprint in fingerprints:
+            raise InputError("Duplicate evidence content")
+        fingerprints.add(fingerprint)
         when = date_value(row.get("date"))
         if boundary and when >= boundary:
             raise InputError("Evidence violates exclusive cutoff")
         if bundle.get("industry_filter") and row["industry"] != bundle["industry_filter"]:
             raise InputError("Evidence violates industry filter")
+    if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
+        raise InputError("Evidence must be ordered chronologically")
     capability, summary = summarize(evidence)
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
@@ -274,6 +340,7 @@ def validate_bundle(bundle):
 
 
 ANSWER_SHAPE = {
+    "bundle_sha256": "复制当前证据包的 bundle_sha256，不可使用另一问题或另一用户的值",
     "answer_mode": "simulation | facts_summary | insufficient_evidence",
     "answer": "面向用户的回答，关键事实在句末引用 [E001] 等编号",
     "claims": [{"text": "一个关键判断", "kind": "fact | inference",
@@ -297,7 +364,8 @@ def render_prompt(bundle):
    原话只能逐字引用，改写写为摘要；时间先后不能直接表述为因果。NPS 0 分是合法分数。
 4. 只对问题给出证据支持的有限回答；不根据缺少原话推断沉默、容忍或流失，不输出心理诊断。
 5. 不推测档案外的具体事实或下一次精确评分；信息不足写入 unknowns，不能虚构答案补全。
-6. 输出一个 JSON 对象，使用下列结构；claims 覆盖回答里的全部关键事实与推断。
+6. 输出一个 JSON 对象，使用下列结构；复制当前证据包的 bundle_sha256。
+   claims 覆盖回答里的全部关键事实与推断，每条 claims 的引用也出现在 answer 正文中。
    quotes 无引用时为空列表；不要在最终交付中附真实用户 ID 或无关个人信息。
 
 输出结构：
@@ -308,13 +376,21 @@ def render_prompt(bundle):
 def check_answer(bundle, answer):
     validate_bundle(bundle)
     errors = []
+    warnings = []
+    if not isinstance(answer, dict):
+        raise InputError("Answer must be an object")
+    if answer.get("bundle_sha256") != bundle["bundle_sha256"]:
+        if bundle["skill_version"] == "2027.0.0-alpha.1" and "bundle_sha256" not in answer:
+            warnings.append("Legacy alpha.1 answer is not bound to its bundle; regenerate before reuse")
+        else:
+            errors.append("Answer bundle_sha256 does not match this question and evidence bundle")
     lookup = {row["id"]: row for row in bundle["evidence"]}
     level = bundle["capability"]["level"]
     mode = answer.get("answer_mode")
-    allowed = {"simulation", "facts_summary", "insufficient_evidence"}
+    allowed = ("simulation", "facts_summary", "insufficient_evidence")
     if mode not in allowed:
         errors.append("Invalid answer_mode")
-    if level == "facts_only" and mode not in {"facts_summary", "insufficient_evidence"}:
+    if level == "facts_only" and mode not in ("facts_summary", "insufficient_evidence"):
         errors.append("Facts-only evidence cannot support individual simulation")
     if level == "insufficient" and mode != "insufficient_evidence":
         errors.append("No visible evidence; answer must use insufficient_evidence")
@@ -326,6 +402,8 @@ def check_answer(bundle, answer):
         claims = []
     if mode != "insufficient_evidence" and not claims:
         errors.append("A substantive answer must declare its claims")
+    claim_refs = set()
+    inline_refs = set(re.findall(r"\[(E\d+)\]", str(answer.get("answer", ""))))
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict):
             errors.append(f"claim {index}: must be an object")
@@ -333,14 +411,20 @@ def check_answer(bundle, answer):
         refs = claim.get("evidence_ids")
         if not isinstance(refs, list) or not refs or any(not isinstance(ref, str) or ref not in lookup for ref in refs):
             errors.append(f"claim {index}: missing or unknown evidence ID")
-        if claim.get("kind") not in {"fact", "inference"}:
+        else:
+            claim_refs.update(refs)
+        if claim.get("kind") not in ("fact", "inference"):
             errors.append(f"claim {index}: invalid kind")
         if not isinstance(claim.get("text"), str) or not claim["text"].strip():
             errors.append(f"claim {index}: missing text")
-        if claim.get("confidence") not in {"low", "medium", "high"}:
+        if claim.get("confidence") not in ("low", "medium", "high"):
             errors.append(f"claim {index}: invalid confidence")
         if claim.get("kind") == "inference" and claim.get("confidence") == "high":
             errors.append(f"claim {index}: inference confidence exceeds medium")
+    if claim_refs - inline_refs:
+        errors.append("Declared claim evidence must also be cited in answer text")
+    if (inline_refs & set(lookup)) - claim_refs:
+        errors.append("Answer citations must be declared by a claim")
     quotes = answer.get("quotes")
     if not isinstance(quotes, list):
         errors.append("quotes must be a list")
@@ -355,7 +439,9 @@ def check_answer(bundle, answer):
         if (not row or row["kind"] != "verbatim" or not isinstance(text, str) or
                 not text.strip() or text not in row.get("text", "")):
             errors.append(f"quote {index}: quote is not an exact substring of its verbatim evidence")
-    for ref in re.findall(r"\[(E\d+)\]", str(answer.get("answer", ""))):
+        elif ref not in claim_refs:
+            errors.append(f"quote {index}: quote evidence must be declared by a claim")
+    for ref in inline_refs:
         if ref not in lookup:
             errors.append(f"answer cites unknown ID: {ref}")
     unknowns = answer.get("unknowns")
@@ -363,8 +449,8 @@ def check_answer(bundle, answer):
         errors.append("unknowns must be a list of non-empty strings")
     elif mode == "insufficient_evidence" and not unknowns:
         errors.append("Insufficient evidence requires an explicit unknown")
-    return {"ok": not errors, "errors": errors,
-            "check_scope": "Structure, evidence IDs, exact quote substrings and capability limits only",
+    return {"ok": not errors, "errors": errors, "warnings": warnings,
+            "check_scope": "Bundle binding, structure, citation coverage, exact quote substrings and capability limits only",
             "semantic_review_required": True, "validation_status": "experimental_unvalidated"}
 
 
@@ -382,23 +468,53 @@ def write_new(path, text):
         raise InputError("Output already exists; choose a new output filename") from exc
 
 
+def create_interview(root, buyer_id, question, output_dir, cutoff=None, industry=None,
+                     max_records=24, max_chars=40000):
+    bundle = prepare(root, buyer_id, question, cutoff, industry, max_records, max_chars)
+    prompt = render_prompt(bundle)
+    directory = Path(output_dir).expanduser().resolve()
+    directory.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(mode=0o700)
+    except FileExistsError as exc:
+        raise InputError("Interview directory already exists; choose a new directory") from exc
+    mode = {"individual_memory": "simulation", "limited_attitude": "simulation",
+            "facts_only": "facts_summary", "insufficient": "insufficient_evidence"}[bundle["capability"]["level"]]
+    template = {"bundle_sha256": bundle["bundle_sha256"], "answer_mode": mode,
+                "answer": "", "claims": [], "quotes": [], "unknowns": []}
+    manifest = {"schema_version": 1, "skill_version": VERSION, "status": "awaiting_host_answer",
+                "bundle_sha256": bundle["bundle_sha256"],
+                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                "evidence_file": "evidence.json", "prompt_file": "prompt.txt",
+                "template_file": "answer.template.json", "answer_file": "answer.json",
+                "model_called": False, "validation_status": "experimental_unvalidated"}
+    for name, value in (("evidence.json", bundle), ("answer.template.json", template), ("run.json", manifest)):
+        write_new(str(directory / name), json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    write_new(str(directory / "prompt.txt"), prompt)
+    return {"ok": True, "directory": str(directory), "status": manifest["status"],
+            "capability": bundle["capability"]["level"], "model_called": False}
+
+
 def parser():
     top = argparse.ArgumentParser(description=__doc__)
     top.add_argument("--version", action="version", version=VERSION)
     commands = top.add_subparsers(dest="command", required=True)
     doctor = commands.add_parser("doctor", help="Check local archive directories without exposing records")
     doctor.add_argument("--profiles-dir")
-    for name in ("inspect", "prepare"):
+    for name in ("inspect", "prepare", "interview"):
         cmd = commands.add_parser(name, help="Inspect evidence depth" if name == "inspect" else "Build a dated evidence bundle")
         cmd.add_argument("--profiles-dir")
         cmd.add_argument("--buyer-id", required=True)
         cmd.add_argument("--question", default="概括历史体验和未知边界" if name == "inspect" else None,
-                         required=name == "prepare")
+                         required=name != "inspect")
         cmd.add_argument("--cutoff", help="Exclusive ISO boundary; naive timestamps use Asia/Shanghai")
         cmd.add_argument("--industry", choices=sorted(INDUSTRIES))
         cmd.add_argument("--max-records", type=int, default=24)
         cmd.add_argument("--max-chars", type=int, default=40000)
-        cmd.add_argument("--output")
+        if name == "interview":
+            cmd.add_argument("--output-dir", required=True)
+        else:
+            cmd.add_argument("--output")
     prompt = commands.add_parser("prompt", help="Render instructions for the host AI; does not call a model")
     prompt.add_argument("--bundle", required=True)
     prompt.add_argument("--output")
@@ -420,6 +536,12 @@ def main(argv=None):
                               "archive_directories": dirs, "network_required": False,
                               "validation_status": "experimental_unvalidated"}, ensure_ascii=False, indent=2))
             return 0 if ok else 1
+        if args.command == "interview":
+            result = create_interview(resolve_root(args.profiles_dir), args.buyer_id, args.question,
+                                      args.output_dir, args.cutoff, args.industry,
+                                      args.max_records, args.max_chars)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         if args.command in {"prepare", "inspect"}:
             bundle = prepare(resolve_root(args.profiles_dir), args.buyer_id, args.question,
                              args.cutoff, args.industry, args.max_records, args.max_chars)

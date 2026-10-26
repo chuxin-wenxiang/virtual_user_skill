@@ -1,6 +1,6 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.1` · 效果验证：**待补**
+版本：`2027.0.0-alpha.2` · 效果验证：**待补**
 
 把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。没有独立模型调用，不需要 API Key。真实用户档案不随代码发布。
 
@@ -34,6 +34,20 @@ python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json
 
 输出文件默认以本地用户读写权限创建；同名文件已存在会报错，请换文件名。运行示例第二次时可以换一个输出目录。`outputs/` 被 Git 忽略，不应提交真实证据。
 
+## 一条命令开始访谈
+
+```bash
+python3 scripts/authentic_user.py interview --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --output-dir outputs/interview-demo
+```
+
+命令创建证据包、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，再检查：
+
+```bash
+python3 scripts/authentic_user.py check-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json
+```
+
+新回答必须携带当前证据包的 `bundle_sha256`，正文引用与 `claims` 引用需要一致，避免串用另一用户或问题的回答。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
+
 ## 接入自己的本地档案
 
 ```text
@@ -51,6 +65,17 @@ python3 scripts/authentic_user.py prepare --buyer-id USER_ID --question '你最�
 ```
 
 没有参数或环境变量时，默认检查本机 `~/.agents/v2027_profiles`。指定自己的真实 ID，不要使用示例 ID 代替本人。历史回测必须加 `--cutoff`；日期是排他边界，默认时区为上海时间。档案字段、行业代码和限制见 [数据契约](references/data-contract.md)。
+
+## 准备小样本验证
+
+```bash
+python3 scripts/validation_prep.py scan --profiles-dir /absolute/path/my-profiles
+python3 scripts/validation_prep.py build --profiles-dir /absolute/path/my-profiles --input-dir /private/tmp/pilot-inputs --judge-dir /private/tmp/pilot-judge
+```
+
+默认按四组各 2 人选取互斥的 8 人，生成四类题、两种条件的 64 份提示词和计划重复 2 次的 128 条调用清单。实际是否能满足配额取决于本地数据；不够时会报错，不补造样本。材料保持本地，输入目录和评分隐藏材料目录相互分离。
+
+本工具比较“同一批历史标签”与“同一可见历史的个体记忆”，不冒称复现旧生产 Agent。模型版本与参数仍需在生成前冻结，未知题需先核实可见证据；`model_calls_completed=0` 表示只准备了材料。详见 [验证流程与口径](references/validation.md)。
 
 ## 检查
 

@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "使用全真用户 v2027 的本地个体历史档案整理证据、模拟访谈或回答用户视角问题，附原话引用、推断与未知边界。适用于明确要求 v2027、个体记忆驱动模拟或按真实用户 ID 访谈；需要本地授权档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.1"
+  version: "2027.0.0-alpha.2"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -18,9 +18,12 @@ metadata:
 
 ```bash
 python3 scripts/authentic_user.py doctor
+python3 scripts/authentic_user.py interview --buyer-id USER_ID --question '你最在意哪些体验？' --output-dir /tmp/user-interview
 python3 scripts/authentic_user.py prepare --buyer-id USER_ID --question '你最在意哪些体验？' --industry domestic_hotel --output /tmp/user-memory.json
 python3 scripts/authentic_user.py prompt --bundle /tmp/user-memory.json --output /tmp/user-prompt.txt
 ```
+
+优先用 `interview` 一次创建 `evidence.json`、`prompt.txt`、`answer.template.json`、`run.json`。目录内模板不是回答；读取提示词后由当前宿主 AI 生成 `answer.json`，再用同目录的证据包检查。也可以使用上面的分步命令。已有输出目录不覆盖，追问时新建目录，并保持相同用户、时间边界和行业；此前模型回答不能作为新事实。
 
 时间回测必须加 `--cutoff '2026-01-01'`，它排除该时点及之后的全部记录。日期未带时区时按上海时间解释，日期本身表示当天零点。行业代码见 [档案与边界说明](references/data-contract.md)。原有完整 L2 汇总、L3/L4、无时点人口画像从不进入证据包，以避免未来信息和推断污染。不要为“更像真人”重新读入这些被排除的字段。
 
@@ -35,7 +38,7 @@ python3 scripts/authentic_user.py prompt --bundle /tmp/user-memory.json --output
 
 这些档位是未经效果验证的证据深度启发式，不是可信度分数。第一人称回答明确标为“AI 模拟”，不能冒充本人发言。关键事实带 `[E001]` 等引用；原话逐字引用，改写标“摘要”。推断说明依据和不确定性，不把相关性写成因果。没有原话不意味着沉默、流失或高容忍。保留合法 NPS 0 分，不擅自认定其无效。
 
-按提示词中的 JSON 结构保存回答：`answer_mode`、`answer`、`claims`、`quotes`、`unknowns`。每条关键事实或推断列出有效证据 ID；推断置信度不高于 medium。示例见 [合成回答](examples/answer-demo.json)，仅用于演示协议。
+按提示词中的 JSON 结构保存回答：`bundle_sha256`、`answer_mode`、`answer`、`claims`、`quotes`、`unknowns`。复制当前证据包的校验值，将回答绑定到该用户、问题和可见证据。每条关键事实或推断列出有效证据 ID，正文也带相应引用；推断置信度不高于 medium。示例见 [合成回答](examples/answer-demo.json)，只对 README 中的固定合成问题有效，不能挪作别的用户或问题的结果。
 
 ```bash
 python3 scripts/authentic_user.py check-answer --bundle /tmp/user-memory.json --answer /tmp/user-answer.json
@@ -48,3 +51,7 @@ python3 scripts/authentic_user.py check-answer --bundle /tmp/user-memory.json --
 向用户提供直接回答、必要证据、推断和未知边界；注明预览版效果实验待补。若用户需要机器可读结果，提供本地 JSON 路径。避免展示真实 ID 和无关个人信息；化名不等于匿名，原话仍可能识别人。不要自动上传、发送或提交证据包。
 
 无真实档案时可以运行 [README](README.md) 中的合成演示，但必须明确它不是访谈结果。发布内容与验证状态见 [发布说明](RELEASE_NOTES.md)。
+
+## 小样本验证准备
+
+需要准备回测材料时读 [验证流程](references/validation.md)，使用 `scripts/validation_prep.py`。该工具生成两种信息条件的输入、隐藏答案和调用清单，不调用模型。先冻结模型及参数、检查未知题覆盖范围，再执行生成；生成时只访问 inputs，不能读取 judge。实验结果必须包含真实回答、评分和失败案例；不把“计划调用数”或“已生成输入”写成已完成实验。

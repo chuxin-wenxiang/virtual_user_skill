@@ -37,7 +37,9 @@ class EvidenceTests(unittest.TestCase):
         return au.prepare(self.root, "demo-rich", "酒店退改和价格透明，你更在意什么？", cutoff="2026-01-01", **kwargs)
 
     def answer(self):
-        return json.loads((ROOT / "examples/answer-demo.json").read_text())
+        answer = json.loads((ROOT / "examples/answer-demo.json").read_text())
+        answer["bundle_sha256"] = self.bundle()["bundle_sha256"]
+        return answer
 
     def test_cutoff_excludes_hidden_and_full_history_derivatives(self):
         bundle = self.bundle()
@@ -159,7 +161,8 @@ class EvidenceTests(unittest.TestCase):
         answer["answer"] += "[E998]"
         result = au.check_answer(self.bundle(), answer)
         self.assertFalse(result["ok"])
-        self.assertEqual(len(result["errors"]), 3)
+        self.assertTrue(any("unknown evidence ID" in error for error in result["errors"]))
+        self.assertTrue(any("exact substring" in error for error in result["errors"]))
 
     def test_unsupported_high_confidence_inference_is_rejected(self):
         answer = self.answer()
@@ -171,7 +174,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(au.check_answer(sparse, self.answer())["ok"])
         empty = self.bundle(industry="rental")
         self.assertFalse(au.check_answer(empty, self.answer())["ok"])
-        unknown = {"answer_mode": "insufficient_evidence", "answer": "证据不足，无法模拟。",
+        unknown = {"bundle_sha256": empty["bundle_sha256"], "answer_mode": "insufficient_evidence", "answer": "证据不足，无法模拟。",
                    "claims": [], "quotes": [], "unknowns": ["没有符合条件的租车记录"]}
         self.assertTrue(au.check_answer(empty, unknown)["ok"])
 
@@ -202,8 +205,8 @@ class EvidenceTests(unittest.TestCase):
         prompt = self.root / "prompt.txt"
         commands = [
             ["doctor", "--profiles-dir", str(self.root)],
-            ["prepare", "--profiles-dir", str(self.root), "--buyer-id", "demo-rich", "--question", "问题",
-             "--cutoff", "2026-01-01", "--output", str(bundle)],
+            ["prepare", "--profiles-dir", str(self.root), "--buyer-id", "demo-rich", "--question", "酒店退改和价格透明，你更在意什么？",
+             "--cutoff", "2026-01-01", "--industry", "domestic_hotel", "--output", str(bundle)],
             ["prompt", "--bundle", str(bundle), "--output", str(prompt)],
             ["check-answer", "--bundle", str(bundle), "--answer", str(ROOT / "examples/answer-demo.json")],
         ]
@@ -212,6 +215,89 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
         self.assertIn("BEGIN_UNTRUSTED_EVIDENCE_JSON", prompt.read_text())
         self.assertNotIn("HIDDEN_DEMO", prompt.read_text())
+
+    def test_answers_are_bound_to_user_question_and_bundle(self):
+        other = au.prepare(self.root, "demo-rich", "另一个问题", cutoff="2026-01-01")
+        answer = self.answer()
+        self.assertFalse(au.check_answer(other, answer)["ok"])
+        del answer["bundle_sha256"]
+        self.assertFalse(au.check_answer(self.bundle(), answer)["ok"])
+
+    def test_claims_and_answer_inline_citations_must_agree(self):
+        answer = self.answer()
+        answer["answer"] = "AI 模拟：我有很多经历。"
+        self.assertFalse(au.check_answer(self.bundle(), answer)["ok"])
+        answer = self.answer()
+        answer["answer"] += " [E001]"
+        self.assertFalse(au.check_answer(self.bundle(), answer)["ok"])
+
+    def test_malformed_bundle_types_raise_input_error(self):
+        for field, value in (("capability", []), ("industry_filter", []), ("question", {}), ("source_tier", [])):
+            bundle = self.bundle()
+            bundle[field] = value
+            bundle["bundle_sha256"] = au.bundle_digest(bundle)
+            with self.subTest(field=field), self.assertRaises(au.InputError):
+                au.validate_bundle(bundle)
+
+    def test_rehashed_invalid_scores_and_changed_source_records_fail(self):
+        for score in (999, True, 1.5, None):
+            bundle = self.bundle()
+            bundle["evidence"][0]["score"] = score
+            bundle["capability"], bundle["derived_summary"] = au.summarize(bundle["evidence"])
+            bundle["bundle_sha256"] = au.bundle_digest(bundle)
+            with self.subTest(score=score), self.assertRaises(au.InputError):
+                au.validate_bundle(bundle)
+
+    def test_json_duplicate_keys_and_nonfinite_constants_fail_cleanly(self):
+        path = self.root / "bad.json"
+        for text in ('{"a":1,"a":2}', '{"a":NaN}', '{"a":Infinity}'):
+            path.write_text(text)
+            with self.subTest(text=text), self.assertRaises(au.InputError):
+                au.read_object(path)
+
+    def test_legacy_bundle_still_reads_with_unbound_warning(self):
+        bundle = self.bundle()
+        bundle["skill_version"] = "2027.0.0-alpha.1"
+        bundle["bundle_sha256"] = au.bundle_digest(bundle)
+        answer = self.answer()
+        del answer["bundle_sha256"]
+        result = au.check_answer(bundle, answer)
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result["warnings"])
+
+    def test_interview_workspace_has_bound_template_and_no_fake_result(self):
+        directory = self.root / "interview"
+        result = au.create_interview(self.root, "demo-rich", "问题", directory, cutoff="2026-01-01")
+        self.assertFalse(result["model_called"])
+        self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+        bundle = au.read_object(directory / "evidence.json")
+        template = au.read_object(directory / "answer.template.json")
+        self.assertEqual(template["bundle_sha256"], bundle["bundle_sha256"])
+        self.assertFalse((directory / "answer.json").exists())
+        self.assertFalse(au.check_answer(bundle, template)["ok"])
+        with self.assertRaises(au.InputError):
+            au.create_interview(self.root, "demo-rich", "问题", directory)
+
+    def test_bad_bundle_cli_returns_json_error_without_traceback(self):
+        bundle = self.bundle()
+        bundle["capability"] = []
+        bundle["bundle_sha256"] = au.bundle_digest(bundle)
+        path = self.root / "bad-bundle.json"
+        path.write_text(json.dumps(bundle))
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/authentic_user.py"),
+                                 "prompt", "--bundle", str(path)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(json.loads(result.stderr)["ok"])
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_malformed_answer_fields_return_check_errors(self):
+        answer = self.answer()
+        answer.update({"answer_mode": [], "claims": [{"kind": {}, "text": "test", "evidence_ids": [{}],
+                                                     "confidence": []}],
+                       "quotes": [{"evidence_id": [], "text": ""}], "unknowns": {}})
+        for bundle in (self.bundle(), au.prepare(self.root, "demo-sparse", "问题")):
+            with self.subTest(level=bundle["capability"]["level"]):
+                self.assertFalse(au.check_answer(bundle, answer)["ok"])
 
 
 if __name__ == "__main__":

@@ -9,11 +9,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = {
     ".gitignore", "SKILL.md", "VERSION", "README.md", "RELEASE_NOTES.md", "LICENSE",
-    "agents/openai.yaml", "references/data-contract.md",
+    "agents/openai.yaml", "references/data-contract.md", "references/validation.md",
     "scripts/authentic_user.py", "scripts/check_release.py", "scripts/package_release.py",
     "examples/profiles/archives_v2027/demo-rich.json",
     "examples/profiles/archives_extended/demo-sparse.json", "examples/answer-demo.json",
-    "tests/test_authentic_user.py",
+    "tests/test_authentic_user.py", "scripts/validation_prep.py", "tests/test_validation_prep.py",
 }
 LOCAL_ONLY = {".git", "__pycache__", ".venv", "outputs", "dist"}
 
