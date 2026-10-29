@@ -2,7 +2,7 @@
 
 ## v2027 preview
 
-[Individual-memory Skill](skills/authentic-user-v2027/README.md), version `2027.0.0-alpha.4`, includes a local evidence CLI and an optional OAuth adapter for an authorized ChatGPT plan. No real archives or credentials are distributed. An 8-user pilot collected all 128 grid positions, but a recovery race overwrote one output; four paired answers were quarantined and 124 remain in the exploratory analysis. **Execution integrity did not pass and effectiveness is unvalidated.** Read the [aggregate pilot report](skills/authentic-user-v2027/references/pilot-20261026.md) for denominators, assistant-review limits, and fixes. The existing implementation below remains available.
+[Individual-memory Skill](skills/authentic-user-v2027/README.md), version `2027.0.0-alpha.5`, separates exact source fields from bounded inferences and renders citations from one structure. The same-eight-user regression completed **128/128 calls with passing local integrity checks**, no retries, and no paid fallback. All citation schemas passed; six of 72 memory-condition inferences still had only partial premise support. **This is a usable research preview, not independently validated human simulation.** Read the [new aggregate report](skills/authentic-user-v2027/references/pilot-20261029.md) for abstentions, paired scores, repeated-target sensitivity and limits. Real archives and credentials stay local. The [earlier pilot deviation](skills/authentic-user-v2027/references/pilot-20261026.md) remains documented. The existing implementation below remains available.
 
 > **AI virtual users powered by 54k+ real, anonymized user-research scenarios.**
 > Stop interviewing prompt-engineered personas. Start talking to ones built from actual data.

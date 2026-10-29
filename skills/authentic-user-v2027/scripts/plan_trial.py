@@ -2,6 +2,7 @@
 """Serial frozen trial execution through the explicitly authorized ChatGPT plan."""
 import argparse
 import json
+import hashlib
 import os
 from pathlib import Path
 import time
@@ -9,6 +10,7 @@ import time
 import authentic_user as au
 import chatgpt_plan as cp
 import validation_workflow as vw
+import claim_protocol as typed
 
 
 def execute(run_dir, credential_dir, consent_file):
@@ -20,7 +22,7 @@ def execute(run_dir, credential_dir, consent_file):
         raise cp.PlanStop('Another runner or an unreviewed stale execution lock exists') from None
     try:
         with os.fdopen(fd, 'w') as stream:
-            json.dump({'pid': os.getpid(), 'started_unix': int(time.time())}, stream)
+            json.dump({'pid': os.getpid(), 'started_unix': time.time()}, stream)
         return _execute(run_dir, credential_dir, consent_file)
     finally:
         lock.unlink(missing_ok=True)
@@ -35,11 +37,19 @@ def _execute(run_dir, credential_dir, consent_file):
                consent.get('destination') == cp.API + '/responses' and
                consent.get('subscription_only') is True and bool(consent.get('human_authorization')), 'Explicit run-bound data transmission consent required')
     transport = config['transport']
-    vw.require(transport.get('output_schema_sha256') == vw.digest(cp.answer_schema()), 'Frozen schema differs')
+    sources=transport.get('execution_sources_sha256',{})
+    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py'}
+    vw.require(isinstance(sources,dict) and set(sources)<=allowed_sources,'Invalid frozen source list')
+    def check_sources():
+        for name,expected in sources.items():
+            vw.require(hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()==expected,'Executing source changed after freeze')
+    check_sources()
+    output_schema = typed.schema() if transport.get('response_protocol') == 'typed-source-v2' else cp.answer_schema()
+    vw.require(transport.get('output_schema_sha256') == vw.digest(output_schema), 'Frozen schema differs')
     vw.require(transport.get('concurrency') == 1 and transport.get('automatic_retries') == 0 and
                transport.get('execution_order') == 'paired_interleaved_v1', 'Unsupported execution schedule')
     root = directory.parent
-    for name in ('attempts', 'provider-events', 'incoming'):
+    for name in ('attempts', 'provider-events', 'incoming', 'receipt-index'):
         (root / name).mkdir(exist_ok=True, mode=0o700)
     state_file = root / 'live-status.json'
     state = au.read_object(state_file) if state_file.exists() else {
@@ -57,20 +67,21 @@ def _execute(run_dir, credential_dir, consent_file):
     state['status'] = 'running'
     cp.atomic_private(state_file, state)
     for key in order:
+        check_sources()
         attempt_path = root / 'attempts' / (key + '.json')
         if attempt_path.exists():
             previous = au.read_object(attempt_path)
             vw.require(previous.get('status') in ('imported', 'structural_failure'), 'Uncertain/failed attempt requires review; no automatic retry')
             continue
         call = calls[key]
-        attempt = {'call_id': key, 'run_sha256': run['run_sha256'], 'status': 'started', 'started_unix': int(time.time())}
+        attempt = {'call_id': key, 'run_sha256': run['run_sha256'], 'status': 'started', 'started_unix': time.time()}
         # Exclusive attempt and receipt creation are a second barrier after the run lock.
         for pending in (root / 'provider-events' / (key + '.json'), root / 'incoming' / (key + '.json')):
             vw.require(not pending.exists(), 'Existing raw evidence requires review; never overwrite a receipt')
         au.write_new(attempt_path, json.dumps(attempt, ensure_ascii=False, indent=2) + '\n')
         try:
             result = client.respond(config['model'], vw.safe_path(Path(run['input_dir']), call['prompt']).read_text(encoding='utf-8'), transport['adapter_instructions'],
-                                    schema=cp.answer_schema(), max_input_chars=transport['max_input_characters'],
+                                    schema=output_schema, max_input_chars=transport['max_input_characters'],
                                     max_output_chars=transport['max_output_characters'])
         except Exception as exc:
             state['transport_failures'] += 1
@@ -96,13 +107,26 @@ def _execute(run_dir, credential_dir, consent_file):
                         'answer': json.loads(result['text']), 'live_transport': 'official_siwc_responses',
                         'request_body_sha256': result['request_body_sha256']}
             target = root / 'incoming' / (key + '.json')
+            if transport.get('response_protocol') == 'typed-source-v2':
+                wire = envelope['answer']
+                try:
+                    envelope['answer'] = typed.render(prompts[call['prompt']]['payload']['user_context']['evidence'], wire)
+                except typed.ProtocolError as exc:
+                    envelope['answer'] = {'protocol_version':2,'wire_answer':wire}
+                    envelope['render_error'] = str(exc)
             au.write_new(target, json.dumps(envelope, ensure_ascii=False, indent=2) + '\n')
+            index={'call_id':key,'run_sha256':run['run_sha256'],
+                   'provider_response_id':result['response']['id'],
+                   'receipt_sha256':hashlib.sha256((root/'provider-events'/(key+'.json')).read_bytes()).hexdigest(),
+                   'envelope_sha256':hashlib.sha256(target.read_bytes()).hexdigest()}
+            au.write_new(root/'receipt-index'/(key+'.json'),json.dumps(index,ensure_ascii=False,indent=2)+'\n')
             vw.ingest(directory, target)
             state['valid_imports'] += 1
             attempt['status'] = 'imported'
         except (au.InputError, ValueError, KeyError) as exc:
             state['structural_failures'] += 1
             attempt.update(status='structural_failure', error=str(exc))
+        attempt['finished_unix'] = time.time()
         cp.atomic_private(attempt_path, attempt)
         if any(type(usage.get(k)) is not int or usage[k] > limit for k, limit in
                (('input_tokens', config['input_token_limit']), ('output_tokens', transport['reported_output_token_guard']))):

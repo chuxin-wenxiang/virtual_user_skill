@@ -14,8 +14,10 @@ PUBLIC_FILES = {
     "examples/profiles/archives_v2027/demo-rich.json",
     "examples/profiles/archives_extended/demo-sparse.json", "examples/answer-demo.json",
     "tests/test_authentic_user.py", "scripts/validation_prep.py", "tests/test_validation_prep.py",
+    "scripts/claim_protocol.py", "scripts/trial_audit.py", "tests/test_claim_protocol.py",
+    "examples/answer-typed-demo.json", "references/evidence-reasoning.md",
     "scripts/chatgpt_plan.py", "scripts/plan_trial.py", "tests/test_chatgpt_plan.py",
-    "tests/test_plan_trial.py", "references/chatgpt-plan.md", "references/pilot-20261026.md",
+    "tests/test_plan_trial.py", "references/chatgpt-plan.md", "references/pilot-20261026.md", "references/pilot-20261029.md",
     "scripts/validation_workflow.py", "tests/test_validation_workflow.py", "examples/model-config.synthetic.json",
 }
 LOCAL_ONLY = {".git", "__pycache__", ".venv", "outputs", "dist"}

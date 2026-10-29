@@ -1,10 +1,10 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.4` · 验证状态：**8 人探索试跑存在执行偏离，未验证有效性**
+版本：`2027.0.0-alpha.5` · 验证状态：**引用结构修复；8人128次完整回归完成，真人效果未获独立验证**
 
 把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。常规访谈使用宿主 AI；可选套餐适配器使用单独 OAuth 授权，不需要 API Key。真实用户档案不随代码发布。
 
-8 人试跑采集到 128 个计划位置的回答，执行偏离后隔离 4 份；124 份进入主分析。结果与限制见[试跑报告](references/pilot-20261026.md)。这是可运行的研究预览版，尚未证明优于标签基线。安装、命令执行和回归检查通过只代表工程功能可用。群体选人、PMF 量化、指标预测、实时更新、人格建模与因果验证均未包含在首版。
+旧版 8 人试跑曾发生执行偏离，记录见[alpha.4 试跑报告](references/pilot-20261026.md)。本版将事实原字段与推断分型，并统一生成引用；方法见[证据与推演](references/evidence-reasoning.md)。[本轮8人回归](references/pilot-20261029.md)完整执行128次，结构全通过，仍有6条部分支持的推断；这是可运行的研究预览版，尚未获独立效果验证。安装、命令执行和回归检查通过只代表工程功能可用。群体选人、PMF 量化、指标预测、实时更新、人格建模与因果验证均未包含在首版。
 
 ## 安装
 
@@ -27,10 +27,11 @@ python3 scripts/authentic_user.py doctor --profiles-dir examples/profiles
 python3 scripts/authentic_user.py inspect --profiles-dir examples/profiles --buyer-id demo-rich --cutoff 2026-01-01
 python3 scripts/authentic_user.py prepare --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --industry domestic_hotel --output outputs/demo-memory.json
 python3 scripts/authentic_user.py prompt --bundle outputs/demo-memory.json --output outputs/demo-prompt.txt
-python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-demo.json
+python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-typed-demo.json
+python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.json --answer examples/answer-typed-demo.json --output outputs/demo-answer.rendered.json
 ```
 
-将 `outputs/demo-prompt.txt` 交给当前宿主 AI，按其中协议生成回答，再用 `check-answer` 检查生成的 JSON。脚本的 `prompt` 命令只生成文本，不会替你调用模型。
+将 `outputs/demo-prompt.txt` 交给当前宿主 AI，按其中协议生成回答，再用 `render-answer` 读取来源字段统一生成引用，并用 `check-answer` 检查绑定结果。脚本的 `prompt` 命令只生成文本，不会替你调用模型。
 
 输出文件默认以本地用户读写权限创建；同名文件已存在会报错，请换文件名。运行示例第二次时可以换一个输出目录。`outputs/` 被 Git 忽略，不应提交真实证据。
 
@@ -43,10 +44,11 @@ python3 scripts/authentic_user.py interview --profiles-dir examples/profiles --b
 命令创建证据包、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，再检查：
 
 ```bash
-python3 scripts/authentic_user.py check-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json
+python3 scripts/authentic_user.py render-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json --output outputs/interview-demo/answer.rendered.json
+python3 scripts/authentic_user.py check-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.rendered.json
 ```
 
-新回答必须携带当前证据包的 `bundle_sha256`，正文引用与 `claims` 引用需要一致，避免串用另一用户或问题的回答。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
+新回答必须携带当前证据包的 `bundle_sha256`，wire_answer 的事实只能选原字段，推断有可见前提、竞争解释及外部更新条件；渲染器统一生成正文与 claims，避免两份清单失配。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
 
 ## 接入自己的本地档案
 
@@ -95,6 +97,10 @@ python3 scripts/validation_workflow.py templates --input-dir /private/tmp/pilot-
 ## 可选套餐试验
 
 使用现有 ChatGPT 套餐执行冻结网格的授权、探针、配置及停止规则见[套餐适配器说明](references/chatgpt-plan.md)。仅在明确资料外发授权后执行；不使用按量 API 付费回退。核心 CLI 保持零依赖，OAuth 校验使用可选 `PyJWT[crypto]`。原始证据、响应和凭证均不公开。
+
+## 引用可靠性与事实/推断边界
+
+本版借鉴2026方法中的证据分层、候选机制/竞争解释和用户配对统计，但不复制内部服务或私有口径。原话仍是历史自述，来源字段忠实提取不证明真实行为；候选机制不是诊断，推断即使格式正确仍需语义复核。没有机制时可明确未知。旧自由文本回答兼容读取并提示复核，新任务优先用 typed-source-v2。
 
 ## 检查
 

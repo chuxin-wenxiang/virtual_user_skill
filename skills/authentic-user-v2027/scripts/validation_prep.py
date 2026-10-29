@@ -245,17 +245,52 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
     return {key: manifest[key] for key in ("status", "users", "unique_prompts", "planned_calls", "model_calls_completed")} | {"pool_summary": summary}
 
 
+def reframe(source_dir, output_dir):
+    """Same visible cases and questions, new typed protocol; does not read hidden answers."""
+    import validation_workflow as workflow
+    import claim_protocol as typed
+    source,old_manifest,old_protocol,calls,prompts=workflow.audit_inputs(source_dir)
+    target=workflow.new_dir(output_dir)
+    protocol=dict(old_protocol)
+    protocol.update(protocol_version="historical-tags-typed-v2-regression",response_protocol="typed-source-v2",
+                    purpose="Same-case post-fix regression, not an independent new-user effectiveness test",
+                    scoring="Assistant review plus deterministic source binding; not independent human validation")
+    protocol["status"]="inputs_only_not_an_experiment_result"
+    header=typed.INSTRUCTIONS+"\nINPUT_JSON:\n"
+    records=[];sha_by_path={}
+    for relative,row in prompts.items():
+        raw=header+json.dumps(row["payload"],ensure_ascii=False,indent=2)+"\n"
+        sha=hashlib.sha256(raw.encode()).hexdigest()
+        au.write_new(target/relative,raw);records.append({"path":relative,"sha256":sha});sha_by_path[relative]=sha
+    for call in calls:call["prompt_sha256"]=sha_by_path[call["prompt"]]
+    manifest={**old_manifest,"skill_version":au.VERSION,"protocol_sha256":digest(protocol),
+              "shared_instructions_sha256":hashlib.sha256(header.encode()).hexdigest(),"inputs":records,
+              "source_inputs_manifest_sha256":digest(old_manifest),"response_protocol":"typed-source-v2",
+              "status":"prepared_not_run","model_calls_completed":0}
+    au.write_new(target/"protocol.json",json.dumps(protocol,ensure_ascii=False,indent=2)+"\n")
+    au.write_new(target/"manifest.json",json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+    au.write_new(target/"calls.jsonl","".join(json.dumps(c,ensure_ascii=False)+"\n" for c in calls))
+    workflow.audit_inputs(target)
+    return {"users":manifest["users"],"planned_calls":len(calls),"response_protocol":"typed-source-v2","same_visible_payloads":True}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("scan", "audit-selection", "build"))
+    parser.add_argument("command", choices=("scan", "audit-selection", "build", "reframe"))
     parser.add_argument("--profiles-dir")
     parser.add_argument("--include-zero", action="store_true", help="Include legal NPS zero scores in pilot selection")
     parser.add_argument("--input-dir")
     parser.add_argument("--judge-dir")
+    parser.add_argument("--source-input-dir")
     parser.add_argument("--per-group", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=2)
     args = parser.parse_args()
     try:
+        if args.command == "reframe":
+            if not args.source_input_dir or not args.input_dir:
+                raise au.InputError("Reframe requires source-input-dir and input-dir")
+            print(json.dumps(reframe(args.source_input_dir,args.input_dir),ensure_ascii=False))
+            return 0
         root = au.resolve_root(args.profiles_dir)
         if args.command == "audit-selection":
             result = audit_selection(root, args.include_zero)

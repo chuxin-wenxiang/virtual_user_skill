@@ -15,6 +15,7 @@ import sys
 
 import authentic_user as au
 import validation_prep as vp
+import claim_protocol as typed
 
 METRICS = ("fact_accuracy", "traceability", "attitude_direction", "theme_overlap",
            "fabricated_experience_rate", "unknown_restraint")
@@ -187,8 +188,9 @@ def templates(input_dir, output_dir):
 
 
 def freeze(input_dir, config_file, review_file, output_dir):
-    root, manifest, _, calls, _ = audit_inputs(input_dir)
+    root, manifest, protocol, calls, _ = audit_inputs(input_dir)
     config, review = model_config(au.read_object(config_file)), au.read_object(review_file)
+    require(protocol.get("response_protocol", "legacy-v1") == config.get("transport", {}).get("response_protocol", "legacy-v1"), "Frozen response protocol differs from input instructions")
     if config["seed_policy"] == "same_repeat_schedule":
         require(len(config["repeat_seeds"]) == max(c["run"] for c in calls), "Seed schedule must cover each repeat exactly")
     require(review.get("inputs_manifest_sha256") == digest(manifest), "Review belongs to another input set")
@@ -229,6 +231,12 @@ def check_common_answer(payload, answer):
     require(isinstance(answer, dict), "Response answer must be an object")
     require(isinstance(answer.get("answer"), str) and answer["answer"].strip(), "Answer text is required")
     require(answer.get("direction") in ("promoter", "passive", "detractor", "unknown"), "Invalid attitude direction")
+    if answer.get("protocol_version") == 2:
+        try:
+            expected = typed.render(payload["user_context"]["evidence"], answer.get("wire_answer"))
+        except typed.ProtocolError as exc:
+            raise au.InputError(str(exc)) from exc
+        require(answer == expected, "Rendered answer differs from original typed wire answer")
     claims, unknowns = answer.get("claims"), answer.get("unknowns")
     require(isinstance(claims, list) and isinstance(unknowns, list), "Answer requires claims and unknowns lists")
     require(all(isinstance(u, str) and u.strip() for u in unknowns), "Invalid unknown statement")

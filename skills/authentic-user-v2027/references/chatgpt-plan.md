@@ -70,3 +70,9 @@ python3 scripts/validation_workflow.py blind --run-dir /private/tmp/pilot-run --
 官方接口约束：[模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[错误与恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)、[授权流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)。上线前以这些官方文档和实际授权响应核验可用性。
 
 发现并发重复或原始回执覆盖时，停止生成；不能挑选后生成的较好答案代替原结果。保留异常说明，将受影响用户/题目两条件和全部重复整组隔离，主分析标注有效分母和协议偏离。需要补测时建立另一个运行与预先说明的分析口径，不在旧结果中偷偷替换。
+
+## alpha.5 输出协议
+
+新回归 transport 加 `response_protocol=typed-source-v2`，schema 哈希取 `claim_protocol.schema()`，共同指令遵循其 `INSTRUCTIONS`。旧 `chatgpt_plan.py probe` 仍是旧形状的连接探针；需要确认新schema时使用同一个 PlanClient.respond 的 schema 参数及空资料，不能用真实资料探针替代外传授权。不要把两种schema混在同一冻结运行。
+
+每个正式调用另存 receipt-index/CALLID.json，绑定初次回执与信封字节哈希、运行和服务响应ID。trial_audit.py会核对这些不可覆盖记录、时间无重叠及计数。结构失败仍保留；审计不是独立服务端认证或真人有效性证明。

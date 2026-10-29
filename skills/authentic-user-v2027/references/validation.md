@@ -131,3 +131,27 @@ python3 scripts/validation_workflow.py summarize --run-dir /private/tmp/pilot-ru
 alpha.4 可显式传入 `blind --raw-response-dir /private/tmp/incoming`，将整个已完成网格的原始 JSON 回答纳入评审。每份保留 `mechanical_check`，不改原答案、不改变严格导入检查；运行和来源绑定仍须成立。汇总分别输出结构失败数和评审回答数，不能把格式失败排除后声称整批通过。原始失败不构成已通过的正式回答导入。
 
 当前 assistant 阅读本地材料进行评分时，来源填写 `assistant_review`，并注明不是独立人工评审。只有真实评分已完成才填 `scored`；模板、自动填满的常数或机械引用匹配不能冒充语义评分。
+
+## alpha.5：同人修复回归与 typed-source-v2
+
+`build` 保留旧协议以便兼容已有材料。新 typed 回归先把已核验可见材料改用新指令；不改用户、问题和证据内容，不读取隐藏答案：
+
+```bash
+python3 scripts/validation_prep.py reframe --source-input-dir /private/tmp/pilot-inputs --input-dir /private/tmp/pilot-inputs-v2
+```
+
+新清单保留原清单哈希及每个可见 payload。隐藏材料在独立审计步骤核对与重绑新输入清单，不能把旧绑定冒充匹配；问题、案例和隐藏文件须保持原样。未知题审阅也只有在可见 payload 和题目完全一致时才能沿用，并明确复用出处，不伪造新审阅。
+
+模型 transport 冻结 `response_protocol=typed-source-v2`、`output_schema_sha256=claim_protocol.schema()` 的实际哈希，及执行源文件哈希；协议与输入指令不一致不能冻结。两条件使用同一 protocol 和方法，不能只给个体记忆条件增加心理指导。没有暴露不可变权重快照时保留模型别名限制。
+
+生成时只接收可见输入；原始 wire 不覆盖，渲染后的事实来源值和引用由同一结构确定。统计分别记录原始 wire 合约通过、程序渲染引用一致、推断语义支持与弃答。来源提取率主要由表示方式保证，不得将格式改造描述为模型语义正确率自然提升。
+
+完成后另执行：
+
+```bash
+python3 scripts/trial_audit.py --run-dir /private/tmp/pilot-run --output /private/tmp/pilot-audit.json
+```
+
+审计核对全部尝试/回执/信封/初存索引的完整网格、唯一响应、传输提示词与schema、没有重叠调用、初次判定和用量对账。它不独立询问服务端或认证真实用户身份。执行源文件在生成期间变动则停止，不继续混版本。
+
+已看过结果并据此改进后的同人复跑属于回归探索。空目标、已重复目标、NA、两条件完整配对集和敏感性分析须事先记录。8 人的重复不能当更多人，不能由bootstrap宣称市场效果。当前 assistant 语义评审照实标注，不能说是独立人工复核。
