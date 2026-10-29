@@ -8,6 +8,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = {
+    "scripts/source_registry.py", "scripts/atomic_protocol.py", "scripts/atomic_review.py",
+    "tests/test_atomic.py", "examples/answer-atomic-demo.json", "references/pilot-20261029-atomic.md",
     ".gitignore", "SKILL.md", "VERSION", "README.md", "RELEASE_NOTES.md", "LICENSE",
     "agents/openai.yaml", "references/data-contract.md", "references/validation.md",
     "scripts/attribution_protocol.py", "scripts/attribution_review.py", "scripts/plan_review.py",

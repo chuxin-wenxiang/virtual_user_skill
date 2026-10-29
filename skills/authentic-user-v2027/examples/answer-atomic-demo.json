@@ -1,0 +1,47 @@
+{
+  "synthetic": true,
+  "example_kind": "atomic_protocol_example_not_model_evaluation",
+  "bundle_sha256": "8b880896035690f4fb9ac5345591b4c8bb72078f9f3d02503fc69efd22f91377",
+  "answer_mode": "simulation",
+  "wire_answer": {
+    "protocol_version": 4,
+    "facts": [
+      "F010",
+      "F016"
+    ],
+    "atoms": [
+      {
+        "kind": "topic_hypothesis",
+        "text": "可能会关注价格是否清楚。",
+        "anchors": [
+          {
+            "ref": "F010",
+            "quote": "价格列得清楚"
+          }
+        ],
+        "confidence": "medium",
+        "condition": "none"
+      },
+      {
+        "kind": "conditional_forecast",
+        "text": "若退改条件仍然提前说明，可能更放心。",
+        "anchors": [
+          {
+            "ref": "F016",
+            "quote": "退改条件提前写明白"
+          }
+        ],
+        "confidence": "low",
+        "condition": "similar_experience"
+      }
+    ],
+    "direction": "unknown",
+    "direction_atom": null,
+    "unknowns": [
+      "no_clear_priority",
+      "missing_complaint_compensation",
+      "missing_amount",
+      "no_observed_outcome"
+    ]
+  }
+}

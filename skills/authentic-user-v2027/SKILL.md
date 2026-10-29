@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "用本地个体历史档案生成有证据边界的模拟访谈，分开历史自述、来源字段与本次推断，并校验引用。适用于明确要求 v2027、个体记忆模拟或按真实用户 ID 访谈；需要授权本地档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.6"
+  version: "2027.0.0-alpha.7"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -36,30 +36,33 @@ python3 scripts/authentic_user.py interview --buyer-id USER_ID --question '你�
 
 宿主按 prompt.txt 保存 answer.json，携带当前 `bundle_sha256`、`answer_mode` 与 `wire_answer`：
 
-- `facts` 只选证据编号和原字段；不能编写事实摘要或把中性标签扩大为成功体验。
-- `inferences` 写本次推断，用 `premises=[{evidence_id,field}]` 绑定具体字段；`scope` 区分自述归纳、话题假设与未来条件。保留 low/medium、候选机制、竞争解释及外部更新条件，含糊处不补具体对象、因果或事件次数。
-- `direction` 为 promoter/passive/detractor/unknown；非 unknown 必须由 `direction_inference` 绑定一条有原话/分数前提的未来条件推断支持，不猜下一次精确分数。
-- `unknowns` 直接说明证据缺口，不为缺失信息造引用。
+- `facts` 只选脚本来源目录中的F字段编号或T统计编号；值由脚本提取，T001列完整可见标签次数，不能当作重要性排名或独立事件数。
+- `atoms` 每条一个可单独审核的判断，分为 source_summary/topic_hypothesis/conditional_forecast/mechanism_hypothesis。每条用 `anchors=[{ref,quote}]` 选择F编号和真实连续原文；不相关的价格、网络、取还判断拆开，复合概念不按词数拆散。同字段可引用不同片段，完整字段只计一次来源。置信仅low/medium。
+- source_summary忠实概括历史；假设明确保留不确定性，不要求已有个人因果证明，也不能添加未引用对象、话题或具体过去经历。机制可不写；无区分依据时保留未知，外部新观察才可更新。
+- `direction` 为 promoter/passive/detractor/unknown；非unknown以 `direction_atom` 绑定一条写明“若/如果…可能…”的条件预测，且引用原话或评分。标签不能单独预测方向。
+- `unknowns` 选择schema定义的缺口代码，由脚本生成说明，避免在自由未知段落里夹带新事实。
 
-完整合成样例见 [字段归因回答](examples/answer-field-demo.json)。不要另写自由正文再复制另一份引用清单；由渲染器读取来源值并统一生成正文、quotes 和 claims：
+完整合成样例见 [逐条判断回答](examples/answer-atomic-demo.json)。保留原始answer.json；先本地预检，按原样保留合法字段和判断，隔离坏条目并保存审计。预检不调用模型，不补写候选。
 
 ```bash
-python3 scripts/authentic_user.py render-answer --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.json --output /private/tmp/user-interview/answer.rendered.json
-python3 scripts/authentic_user.py check-answer --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.rendered.json
+python3 scripts/plan_review.py precheck --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.json --output /private/tmp/user-interview/answer.checked.json --audit-output /private/tmp/user-interview/precheck.json
+python3 scripts/authentic_user.py check-answer --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json
 ```
 
-不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.4 合法证据包和旧回答仍可读取，但旧自由事实文本需要人工语义复核，新任务使用 field-bound-v3；v2仍可读，语义风险继续复核。
+预检只撤回，不改写正文判断；如果方向依赖坏条目则转unknown。原始严格合约通过情况和原文件哈希保留在precheck.json。全局包绑定或无法安全拆分的错误会停止；不能让坏条目连带删掉其他合法判断。`render-answer`仍提供严格整体渲染，不能把派生预检通过冒称原始全通过。
+
+不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.6 合法证据包与旧协议仍可读取；新任务使用 atomic-bound-v4，旧自由文本仍需人工语义复核。话题词表仅形成审核提示，不据关键词数量或未匹配词自动否定来源支持。字段存在和原文匹配只能解决工程错误，不能证明自然语言语义成立。
 
 ## 交付与语义检查
 
-原始候选通过结构检查后，必须再做来源语义复核。宿主读取以下审核提示，只看可见证据和候选，不看隐藏答案；逐条给出 supported/ambiguous/unsupported，保存 review.json。
+原始候选通过结构检查后，必须再做来源语义复核。宿主读取以下审核提示，只看可见证据和候选，不看隐藏答案；来源概括用supported，合理有界假设用bounded_hypothesis；歧义或无支持项用ambiguous/unsupported，逐条指定问题种类、候选中的原文片段及真实缺失F编号，保存review.json。已选字段不能被称为缺失。
 
 ```bash
-python3 scripts/attribution_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.json --output /private/tmp/user-interview/review-prompt.txt
-python3 scripts/attribution_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.json --review /private/tmp/user-interview/review.json --output /private/tmp/user-interview/answer.final.json
+python3 scripts/atomic_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --output /private/tmp/user-interview/review-prompt.txt
+python3 scripts/atomic_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --review /private/tmp/user-interview/review.json --output /private/tmp/user-interview/answer.final.json
 ```
 
-`finalize` 只保留获支持的原推断，不改写候选、不重生成；歧义和无支持项撤下，若承载方向的推断被撤，方向改为 unknown。保留原候选、审核和最终派生结果。未完成审核的回答只能标候选。审核可由当前宿主执行，单独上下文更利于减少自证，但不等于独立人工认证。
+`finalize` 只保留获支持概括和合理有界的原假设，不改写候选、不重生成；逐条撤下歧义和无支持项，若承载方向的推断被撤，方向改为 unknown。保留原候选、审核和最终派生结果。未完成审核的回答只能标候选。审核可由当前宿主执行，单独上下文更利于减少自证，但不等于独立人工认证。
 
 向使用者交付最终回答、来源、推断和未知边界，标研究预览版。逐条检查推断与它引用的前提是否支持、是否把退款当赔付、把评价当真实行为、把候选心理当成确诊；标成 inference 也不能豁免虚构过去经历。
 
@@ -71,6 +74,8 @@ python3 scripts/attribution_review.py finalize --bundle /private/tmp/user-interv
 
 准备和评审读[验证流程](references/validation.md)，套餐执行读[适配器说明](references/chatgpt-plan.md)。先取得对应资料传输授权，再用官方 OAuth 套餐、空资料探针和同一冻结配置；不读取 API Key，不充值或付费回退，额度/传输错误停止。
 
-生成模型只能收到 inputs，不能收到 judge。单进程锁、排他创建和逐调用不可覆盖回执索引保留原始 wire、检查失败及用量；完成后运行 trial_audit.py 检查完整网格、无重叠、唯一回执与计数对账。v3的可选 plan_review.py 在另一个模型上下文中每批审核4份候选，不接收隐藏答案；原始和派生结果分别计分，撤回率与覆盖率必须同时报告。真实失败不从总分母消失，不能挑选替代答案；当前 assistant 评分标 assistant_review，不能冒称独立人工。
+生成模型只能收到 inputs，不能收到 judge。单进程锁、排他创建和逐调用不可覆盖回执索引保留原始 wire、检查失败及用量；完成后运行 trial_audit.py 检查完整网格、无重叠、唯一回执与计数对账。v3/v4的可选 plan_review.py 在另一个模型上下文中每批审核4份候选，不接收隐藏答案；原始和派生结果分别计分，撤回率与覆盖率必须同时报告。真实失败不从总分母消失，不能挑选替代答案；当前 assistant 评分标 assistant_review，不能冒称独立人工。
 
-[新8人留出检查](references/pilot-20261029-fresh.md)完成128次生成，114通过、14失败，29批来源复核仍有漏放/误撤；简单NPS延续基准未被超过，一位目标无实质原因。保留预览，不宣称归因或真人效果已全部验证。[旧同人回归](references/pilot-20261029.md)和[执行偏离](references/pilot-20261026.md)单列。
+[本轮新8人](references/pilot-20261029-atomic.md)完成128次生成，原始严格27通过、101失败；32次来源审核尝试中31批有完整响应，123份有效派生回答仍含8条部分支持判断。记忆Q2命中5/16，简单最近同业NPS延续8/8人；未证明复杂模拟更有效。词表误拦截和同字段多引文修正仅做事后本地回放，结构通过78/128，不能当作新效果验证。113项工程检查通过，继续保留预览。
+
+[alpha.6留出检查](references/pilot-20261029-fresh.md)、[旧同人回归](references/pilot-20261029.md)和[执行偏离](references/pilot-20261026.md)分别保留；真实失败、方案修订及未完成审核不从分母消失。

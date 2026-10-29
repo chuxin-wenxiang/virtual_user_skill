@@ -97,7 +97,8 @@ def target_has_reason_signal(text):
     """Reject generic praise only; this lexical guard does not certify substantive causes."""
     import re
     remaining=re.sub(r"very|really|good|great|cool|nice|excellent|awesome|okay|ok|非常|特别|超级|不错|满意|好评|五星|五分|十分|完美|可以|推荐|很好|很|真|的|好|棒|赞", "", text.lower())
-    return bool(re.sub(r"[\W_0-9]+", "", remaining))
+    from source_registry import topics
+    return bool(re.sub(r"[\W_0-9]+", "", remaining)) and bool(topics(remaining))
 
 
 def fresh_target(candidate, records, min_gap_days=7):
@@ -201,7 +202,9 @@ def baseline_tags(memory):
             for index, ((industry, tag), count) in enumerate(sorted(counts.items()), 1)]
 
 
-def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False, excluded_ids=None, fresh_holdout=False):
+def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False, excluded_ids=None, fresh_holdout=False, response_protocol=None):
+    if response_protocol not in (None, "field-bound-v3", "atomic-bound-v4"):
+        raise au.InputError("Unsupported preparation response protocol")
     if type(repeats) is not int or not 1 <= repeats <= 5:
         raise au.InputError("repeats must be 1–5")
     inputs, judges = Path(input_dir).expanduser().resolve(), Path(judge_dir).expanduser().resolve()
@@ -217,6 +220,11 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
         protocol.update(protocol_version="fresh-user-field-bound-v3",response_protocol="field-bound-v3",
                         selection_seed="fresh-user-v1",min_same_industry_holdout_gap_days=7,max_character_trigram_jaccard=.5,
                         scoring="Separate source-only model review; local held-out outcomes; not independent human validation")
+    if response_protocol == "atomic-bound-v4":
+        import atomic_protocol as atomic
+        shared = atomic.INSTRUCTIONS + "\nINPUT_JSON:\n"
+        protocol.update(protocol_version="fresh-user-atomic-bound-v4", response_protocol=response_protocol,
+                        target_factor_screen="explicit lexical topic beyond generic praise; not semantic certification")
     protocol["pilot_excludes_zero"] = not include_zero
     protocol["repeats_per_question_condition"] = repeats
     # Freeze question/scoring content before any holdout material is inspected.
@@ -250,6 +258,9 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
             for label, data in ((labels[0], tags), (labels[1], evidence)):
                 payload = {"subject_alias": case, "question_id": qid, "question": question,
                            "user_context": {"evidence": data}}
+                if response_protocol == "atomic-bound-v4":
+                    import source_registry as sr
+                    payload["user_context"]["source_catalogue"] = sr.catalogue(data)
                 prompt = shared + json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
                 relative = f"{case}/{label}/{qid}.txt"
                 au.write_new(str(inputs / relative), prompt)

@@ -26,6 +26,8 @@ import authentic_user as au
 API = "https://api.openai.com/v1"
 ISSUER = "https://auth.openai.com"
 SCOPES = {"chatgpt.tokens.use.direct", "resource.invoke"}
+# Bounded tolerance for ordinary issuer/host clock skew; verification remains enabled.
+JWT_CLOCK_LEEWAY_SECONDS = 30
 
 
 class PlanStop(au.InputError):
@@ -64,7 +66,7 @@ def verify_identity(id_token, client_id, nonce, jwks_uri):
         if parsed.scheme != "https" or parsed.hostname != "auth.openai.com":
             raise PlanStop("Unexpected identity signing-key endpoint")
         signing = jwt.PyJWKClient(jwks_uri).get_signing_key_from_jwt(id_token)
-        identity = jwt.decode(id_token, signing.key, algorithms=["RS256"], audience=client_id, issuer=ISSUER,
+        identity = jwt.decode(id_token, signing.key, algorithms=["RS256"], audience=client_id, issuer=ISSUER, leeway=JWT_CLOCK_LEEWAY_SECONDS,
                               options={"require": ["exp", "iss", "aud", "sub", "nonce"]})
         actual_nonce = identity.get("nonce")
         if not isinstance(actual_nonce, str) or not hmac.compare_digest(actual_nonce, nonce):
@@ -252,7 +254,7 @@ class PlanClient:
                         raise PlanStop("Unexpected ID-token key host")
                     signing = jwt.PyJWKClient(jwks).get_signing_key_from_jwt(tokens["id_token"])
                     identity = jwt.decode(tokens["id_token"], signing.key, algorithms=["RS256"],
-                                          audience=self.profile["client_id"], issuer=ISSUER,
+                                          audience=self.profile["client_id"], issuer=ISSUER, leeway=JWT_CLOCK_LEEWAY_SECONDS,
                                           options={"require": ["exp", "iss", "aud", "sub"]})
                     if identity["sub"] != self.profile["subject"]:
                         raise PlanStop("Refreshed account identity changed")

@@ -79,7 +79,7 @@ python3 scripts/validation_workflow.py blind --run-dir /private/tmp/pilot-run --
 
 ## alpha.6：来源复核与费用边界
 
-新批试使用 `response_protocol=field-bound-v3`，schema哈希取 `attribution_protocol.schema()`，共享指令取该模块 `INSTRUCTIONS`。执行源哈希包括 `attribution_protocol.py`、`attribution_review.py` 和 `plan_review.py`；冻结后不能边跑边改执行源码。
+alpha.6批试使用 `response_protocol=field-bound-v3`，schema哈希取 `attribution_protocol.schema()`，共享指令取该模块 `INSTRUCTIONS`。执行源哈希包括 `attribution_protocol.py`、`attribution_review.py` 和 `plan_review.py`；冻结后不能边跑边改执行源码。
 
 完整生成审计通过后，可运行以下可选套餐复核。它逐批只提交4份可见证据和原候选，不读取 judge；同一模型另起请求上下文，仍不是独立人工评审。
 
@@ -99,3 +99,17 @@ python3 -c 'import sys; sys.path.insert(0,"scripts"); import plan_review; print(
 结构失败的原始候选不发送来源模型，不补答、不更改；保存 `.rejected.json`，全部留在原始128位置的失败分母。其余合法候选按固定顺序每批最多4份，末批可少于4份，因此实际请求数可少于32。最终有效输出数须单列，不能写成128份全通过。
 
 若生成结束后才发现复核适配器缺少处理结构失败的边界，先保留生成源码和原始哈希，再登记复核阶段配置，通过 `--phase-config` 显式传入。配置绑定原 `run_sha256`、具体 `reason`、`hidden_answers_seen=false` 及 `sources_sha256`；只允许复核适配器本身与原冻结不同，其余执行源码不得变。不能在生成仍进行时修改，也不能修改生成协议、输入或原始结果。报告中必须列为执行修订。
+
+
+## alpha.7：逐条判断与审核合约
+
+当前批试显式冻结 `response_protocol=atomic-bound-v4`，schema哈希取 `atomic_protocol.schema()`，共享指令取其 `INSTRUCTIONS`。执行源还包括 `source_registry.py`、`atomic_protocol.py`、`atomic_review.py`；旧v2/v3继续按各自schema复现。
+
+`plan_review.py`按冻结协议选择审核器。v4传输来源目录一次，避免把完整原话在证据、目录和所选字段中重复发送；本地审计仍从原始输入重建。概括接受supported，有边界假设接受bounded_hypothesis。单条审核的引用/问题片段合约不合格时仅隔离该条，`.final.json`记录`review_contract_errors`；不重试或改写。已知候选的全局审核哈希/覆盖错误保存`.review-rejected.json`，该候选无最终输出，其余继续；无法归属、重复/缺失候选等批次错误停止。有候选拒绝时状态`completed_with_review_rejections`、退出码2，审计`all_assessments_usable=false`，不能称全部审核成功。报告须列出被隔离数量。
+
+当前词表仅生成语义审核提示；复合用语和同义表达按完整字段含义核对。同字段不同引文允许，used_refs去重，完全相同的重复锚点拒绝。新审核提示和指令属于发布后的执行源版本，复现本轮实测必须使用对应冻结快照；不能拿旧审核哈希复核新增候选判断。
+
+OAuth首次验证及刷新允许最多30秒时钟偏差，仍核验签名、issuer、audience、expiry、账号及适用的nonce；较大未来时间仍拒绝。依据[PyJWT时钟偏差说明](https://pyjwt.readthedocs.io/en/stable/usage.html)，这是有限容差，不关闭令牌验证。探针和正式调用分开记录，授权问题不切到付费API。
+
+
+逐条预检会确定性保留合法原字段和原atom，隔离原始结构错误；不改写文字、不重新生成。普通宿主可用 `plan_review.py precheck` 保存派生回答及审计，随后只审核合法候选。批试保留原始严格失败分母，另报告预检撤回与最终判断覆盖率；预检通过不等于原始模型直接正确。本轮生成后才加入该复核阶段修订，报告须明确披露，不能当作完整事前固定的验证。

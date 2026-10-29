@@ -166,3 +166,32 @@ class PlanRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockSkewTests(unittest.TestCase):
+    setUp = PlanRouteTests.setUp
+    tearDown = PlanRouteTests.tearDown
+    @unittest.skipUnless(importlib.util.find_spec("jwt") and importlib.util.find_spec("cryptography"), "Optional OAuth crypto dependency unavailable")
+    def test_small_clock_skew_allowed_but_large_future_token_rejected_on_refresh(self):
+        import jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        fake = SimpleNamespace(get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key()))
+        for seconds in (10, 300):
+            self.profile['saved_at_unix'] = 0
+            cp.atomic_private(self.root / 'credentials.json', self.profile)
+            client = cp.PlanClient(self.root)
+            now = int(time.time())
+            claims = {'iss':cp.ISSUER,'aud':'synthetic-client','sub':'synthetic-user','iat':now+seconds,'nbf':now+seconds,'exp':now+3600,'nonce':'synthetic-nonce'}
+            token = jwt.encode(claims,key,algorithm='RS256')
+            result = {'access_token':'synthetic-new-access','refresh_token':'synthetic-new-refresh','expires_in':3600,'token_type':'Bearer','id_token':token}
+            client.opener = SimpleNamespace(open=lambda *a, **kw: io.StringIO(json.dumps(result)))
+            client._public_json = lambda url: {'jwks_uri':cp.ISSUER+'/jwks'}
+            with patch.object(jwt,'PyJWKClient',return_value=fake):
+                if seconds == 10:
+                    self.assertEqual(client.access_token(),'synthetic-new-access')
+                    self.assertEqual(cp.verify_identity(token,'synthetic-client','synthetic-nonce',cp.ISSUER+'/jwks')['sub'],'synthetic-user')
+                else:
+                    with self.assertRaises(cp.PlanStop): client.access_token()
+                    with self.assertRaises(cp.PlanStop): cp.verify_identity(token,'synthetic-client','synthetic-nonce',cp.ISSUER+'/jwks')
+                    self.assertEqual(json.loads(client.path.read_text())['access_token'],'synthetic-access')

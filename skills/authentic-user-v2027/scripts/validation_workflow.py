@@ -17,6 +17,8 @@ import authentic_user as au
 import validation_prep as vp
 import claim_protocol as typed
 import attribution_protocol as field_typed
+import atomic_protocol as atomic
+import source_registry as sr
 
 METRICS = ("fact_accuracy", "traceability", "attitude_direction", "theme_overlap",
            "fabricated_experience_rate", "unknown_restraint")
@@ -96,6 +98,8 @@ def audit_inputs(input_dir):
         text = raw.decode("utf-8")
         header, payload = decode_prompt(text)
         require(text_digest(header) == manifest.get("shared_instructions_sha256"), "Shared instructions changed")
+        if protocol.get("response_protocol") == "atomic-bound-v4":
+            require(payload["user_context"].get("source_catalogue") == sr.catalogue(payload["user_context"]["evidence"]), "Derived source catalogue differs from visible evidence")
         prompts[path] = {"sha256": record["sha256"], "payload": payload}
     require(manifest.get("unique_prompts") == len(prompts), "Prompt count mismatch")
     calls, keys, cases = [], set(), set()
@@ -232,9 +236,9 @@ def check_common_answer(payload, answer):
     require(isinstance(answer, dict), "Response answer must be an object")
     require(isinstance(answer.get("answer"), str) and answer["answer"].strip(), "Answer text is required")
     require(answer.get("direction") in ("promoter", "passive", "detractor", "unknown"), "Invalid attitude direction")
-    if answer.get("protocol_version") in (2,3):
+    if answer.get("protocol_version") in (2,3,4):
         try:
-            renderer = field_typed if answer.get("protocol_version")==3 else typed
+            renderer = atomic if answer.get("protocol_version")==4 else field_typed if answer.get("protocol_version")==3 else typed
             expected = renderer.render(payload["user_context"]["evidence"], answer.get("wire_answer"))
         except typed.ProtocolError as exc:
             raise au.InputError(str(exc)) from exc

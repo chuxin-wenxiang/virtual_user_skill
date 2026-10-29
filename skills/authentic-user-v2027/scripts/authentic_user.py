@@ -14,8 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.6"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", VERSION}
+VERSION = "2027.0.0-alpha.7"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -334,7 +334,7 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", VERSION))
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", VERSION))
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
     return bundle
@@ -353,11 +353,13 @@ ANSWER_SHAPE = {
 
 def render_prompt(bundle):
     validate_bundle(bundle)
-    import attribution_protocol as typed
+    import atomic_protocol as typed
+    import source_registry as sr
     return ("全真用户 v2027 研究预览版。只依据下面证据包及能力档位回答；facts_only不能推断，insufficient明确未知。\n"
             + typed.INSTRUCTIONS + "\n输出一个绑定包：bundle_sha256、answer_mode、wire_answer。"
             "answer_mode依能力为simulation/facts_summary/insufficient_evidence。wire_answer结构：\n"
             + json.dumps(typed.schema(), ensure_ascii=False, indent=2)
+            + "\n来源目录：" + json.dumps(sr.catalogue(bundle["evidence"]), ensure_ascii=False)
             + "\nBEGIN_UNTRUSTED_EVIDENCE_JSON\n" + json.dumps(bundle, ensure_ascii=False, indent=2)
             + "\nEND_UNTRUSTED_EVIDENCE_JSON\n")
 
@@ -366,7 +368,9 @@ def render_bound_answer(bundle, answer):
     validate_bundle(bundle)
     import attribution_protocol as field_typed
     import claim_protocol as legacy_typed
-    typed = field_typed if answer.get("wire_answer",{}).get("protocol_version")==3 else legacy_typed
+    import atomic_protocol as atomic
+    version = answer.get("wire_answer",{}).get("protocol_version")
+    typed = atomic if version == 4 else field_typed if version == 3 else legacy_typed
     if answer.get("bundle_sha256") != bundle["bundle_sha256"]:
         raise InputError("Answer bundle_sha256 does not match this question and evidence bundle")
     mode=answer.get("answer_mode")
@@ -405,7 +409,7 @@ def check_answer(bundle, answer):
         return {"ok":not errors,"errors":errors,"warnings":warnings,
                 "check_scope":"Source field binding, typed inference boundaries and deterministic citation rendering; semantic inference review remains required",
                 "semantic_review_required":True,"validation_status":"experimental_unvalidated"}
-    warnings.append("Legacy free-text fact claims need manual semantic review; prefer typed-source-v2")
+    warnings.append("Legacy free-text fact claims need manual semantic review; prefer atomic-bound-v4")
     lookup = {row["id"]: row for row in bundle["evidence"]}
     level = bundle["capability"]["level"]
     mode = answer.get("answer_mode")
@@ -503,7 +507,7 @@ def create_interview(root, buyer_id, question, output_dir, cutoff=None, industry
     mode = {"individual_memory": "simulation", "limited_attitude": "simulation",
             "facts_only": "facts_summary", "insufficient": "insufficient_evidence"}[bundle["capability"]["level"]]
     template = {"bundle_sha256": bundle["bundle_sha256"], "answer_mode": mode,
-                "wire_answer": {"protocol_version":3,"facts":[],"inferences":[],"direction":"unknown","direction_inference":None,"unknowns":[]}}
+                "wire_answer": {"protocol_version":4,"facts":[],"atoms":[],"direction":"unknown","direction_atom":None,"unknowns":[]}}
     manifest = {"schema_version": 1, "skill_version": VERSION, "status": "awaiting_host_answer",
                 "bundle_sha256": bundle["bundle_sha256"],
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
