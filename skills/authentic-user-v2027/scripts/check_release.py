@@ -10,6 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = {
     ".gitignore", "SKILL.md", "VERSION", "README.md", "RELEASE_NOTES.md", "LICENSE",
     "agents/openai.yaml", "references/data-contract.md", "references/validation.md",
+    "scripts/attribution_protocol.py", "scripts/attribution_review.py", "scripts/plan_review.py",
+    "tests/test_attribution.py", "tests/test_plan_review.py", "examples/answer-field-demo.json",
+    "references/pilot-20261029-fresh.md",
     "scripts/authentic_user.py", "scripts/check_release.py", "scripts/package_release.py",
     "examples/profiles/archives_v2027/demo-rich.json",
     "examples/profiles/archives_extended/demo-sparse.json", "examples/answer-demo.json",

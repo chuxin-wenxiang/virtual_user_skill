@@ -93,15 +93,43 @@ def candidate_from(archive, buyer_id, include_zero=False, span_mode="visible_onl
     return None
 
 
-def scan(root, include_zero=False):
+def target_has_reason_signal(text):
+    """Reject generic praise only; this lexical guard does not certify substantive causes."""
+    import re
+    remaining=re.sub(r"very|really|good|great|cool|nice|excellent|awesome|okay|ok|非常|特别|超级|不错|满意|好评|五星|五分|十分|完美|可以|推荐|很好|很|真|的|好|棒|赞", "", text.lower())
+    return bool(re.sub(r"[\W_0-9]+", "", remaining))
+
+
+def fresh_target(candidate, records, min_gap_days=7):
+    """Mechanical target novelty screen, not proof that surveys describe independent events."""
+    import re
+    from claim_protocol import meaningful
+    target=candidate['holdout'];past=[r for r in records if r['date']<target['date'] and r['industry']==target['industry']]
+    quotes=[r for r in past if r['kind']=='verbatim' and meaningful(r.get('text'))]
+    if not meaningful(target['text']) or not target_has_reason_signal(target['text']) or len(quotes)<2 or not past:return False
+    if (au.date_value(target['date'])-au.date_value(past[-1]['date'])).total_seconds()<min_gap_days*86400:return False
+    def grams(text):
+        v=re.sub(r'[^\w\u4e00-\u9fff]','',text.lower())
+        return {v[i:i+3] for i in range(max(0,len(v)-2))}
+    a=grams(target['text'])
+    if not a:return False
+    for q in quotes:
+        b=grams(q['text'])
+        if target['text'].strip()==q['text'].strip() or (b and len(a&b)/len(a|b)>=.5):return False
+    return True
+
+
+def scan(root, include_zero=False, excluded_ids=None, fresh_holdout=False):
     candidates, invalid = [], 0
     core = Path(root) / "archives_v2027"
     if not core.is_dir():
         raise au.InputError("Core archives directory is required for strict pilot selection")
     for path in sorted(core.glob("*.json")):
+        if path.stem in (excluded_ids or set()):continue
         try:
             archive, _ = au.load_archive(root, path.stem)
             candidate = candidate_from(archive, path.stem, include_zero)
+            if candidate and fresh_holdout and not fresh_target(candidate,au.records_from(archive)):candidate=None
         except au.InputError:
             invalid += 1
             continue
@@ -134,11 +162,11 @@ def audit_selection(root, include_zero=False):
             "scope": "Sensitivity diagnostic only; frozen selection remains visible-only and last-same-industry"}
 
 
-def choose(candidates, per_group=2):
+def choose(candidates, per_group=2, seed="pilot-v1"):
     if type(per_group) is not int or not 1 <= per_group <= 8:
         raise au.InputError("per_group must be 1–8")
     groups = ("transition", "stable_nonpromoter", "complex", "stable_promoter")
-    pool = sorted(candidates, key=lambda c: digest({"seed": "pilot-v1", "buyer_id": c["buyer_id"]}))
+    pool = sorted(candidates, key=lambda c: digest({"seed": seed, "buyer_id": c["buyer_id"]}))
     # Bipartite augmenting paths avoid flexible users consuming a scarce group slot.
     slots = [group for group in groups for _ in range(per_group)]
     slots.sort(key=lambda group: sum(group in c["groups"] for c in pool))
@@ -173,7 +201,7 @@ def baseline_tags(memory):
             for index, ((industry, tag), count) in enumerate(sorted(counts.items()), 1)]
 
 
-def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False):
+def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False, excluded_ids=None, fresh_holdout=False):
     if type(repeats) is not int or not 1 <= repeats <= 5:
         raise au.InputError("repeats must be 1–5")
     inputs, judges = Path(input_dir).expanduser().resolve(), Path(judge_dir).expanduser().resolve()
@@ -182,12 +210,24 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
     if inputs.exists() or judges.exists():
         raise au.InputError("Validation output directories already exist; choose new directories")
     protocol = dict(PROTOCOL)
+    shared=SHARED_INSTRUCTIONS
+    if fresh_holdout:
+        import attribution_protocol as field_typed
+        shared=field_typed.INSTRUCTIONS+"\nINPUT_JSON:\n"
+        protocol.update(protocol_version="fresh-user-field-bound-v3",response_protocol="field-bound-v3",
+                        selection_seed="fresh-user-v1",min_same_industry_holdout_gap_days=7,max_character_trigram_jaccard=.5,
+                        scoring="Separate source-only model review; local held-out outcomes; not independent human validation")
     protocol["pilot_excludes_zero"] = not include_zero
     protocol["repeats_per_question_condition"] = repeats
     # Freeze question/scoring content before any holdout material is inspected.
     protocol_sha = digest(protocol)
-    candidates, summary = scan(root, include_zero)
-    selected = choose(candidates, per_group)
+    candidates, summary = scan(root, include_zero, excluded_ids, fresh_holdout)
+    summary["excluded_previous_users"]=len(excluded_ids or set())
+    if fresh_holdout:
+        ranked=sorted(candidates,key=lambda c:digest({"seed":"fresh-user-v1","buyer_id":c['buyer_id']}))
+        if len(ranked)<4*per_group:raise au.InputError("Not enough unseen users under preregistered target quality rules")
+        selected=[('fresh_holdout',c) for c in ranked[:4*per_group]]
+    else:selected=choose(candidates,per_group)
     # Case order must not reveal the quota/group assignment to the generator.
     selected.sort(key=lambda item: digest({"seed": "blind-case-order-v1", "buyer_id": item[1]["buyer_id"]}))
     for directory in (inputs, judges):
@@ -210,7 +250,7 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
             for label, data in ((labels[0], tags), (labels[1], evidence)):
                 payload = {"subject_alias": case, "question_id": qid, "question": question,
                            "user_context": {"evidence": data}}
-                prompt = SHARED_INSTRUCTIONS + json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+                prompt = shared + json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
                 relative = f"{case}/{label}/{qid}.txt"
                 au.write_new(str(inputs / relative), prompt)
                 prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
@@ -228,7 +268,7 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
         case_map.append({"case": case, "group": group})
     au.write_new(str(inputs / "calls.jsonl"), "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in calls))
     manifest = {"skill_version": au.VERSION, "status": "prepared_not_run", "protocol_sha256": protocol_sha,
-                "shared_instructions_sha256": hashlib.sha256(SHARED_INSTRUCTIONS.encode()).hexdigest(),
+                "shared_instructions_sha256": hashlib.sha256(shared.encode()).hexdigest(),
                 "users": len(selected), "unique_prompts": len(input_records), "planned_calls": len(calls),
                 "model_calls_completed": 0, "inputs": input_records,
                 "next_requirements": ["Review each unknown-question scope using only visible evidence",

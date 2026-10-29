@@ -1,6 +1,6 @@
 # 可选：使用现有 ChatGPT 套餐执行试验
 
-常规证据准备和宿主访谈仍离线运行。仅在用户明确要求外部模型执行时使用此适配器；Sign in with ChatGPT 的可用性和额度取决于实际账号。授权成功不保证足够完成整批。
+证据准备和校验在本地运行，常规访谈与来源复核使用当前宿主模型。Skill不要求额外付费API；宿主套餐用户消耗套餐，其他接入方式依其自身计费，不能保证所有宿主都免费。仅在用户明确要求外部模型执行时使用此适配器；Sign in with ChatGPT 的可用性和额度取决于实际账号。授权成功不保证足够完成整批。
 
 本适配器仅使用用户为本应用单独授权的 OAuth 套餐范围，连接官方 `/v1/responses`。不读取 `OPENAI_API_KEY`，不读取 Codex 登录凭证，不充值，不切换按量 API 计费。账号不支持、额度不足、服务错误或结果不完整时停止新请求，没有自动重试。重新授权也不能绕过额度限制。
 
@@ -76,3 +76,26 @@ python3 scripts/validation_workflow.py blind --run-dir /private/tmp/pilot-run --
 新回归 transport 加 `response_protocol=typed-source-v2`，schema 哈希取 `claim_protocol.schema()`，共同指令遵循其 `INSTRUCTIONS`。旧 `chatgpt_plan.py probe` 仍是旧形状的连接探针；需要确认新schema时使用同一个 PlanClient.respond 的 schema 参数及空资料，不能用真实资料探针替代外传授权。不要把两种schema混在同一冻结运行。
 
 每个正式调用另存 receipt-index/CALLID.json，绑定初次回执与信封字节哈希、运行和服务响应ID。trial_audit.py会核对这些不可覆盖记录、时间无重叠及计数。结构失败仍保留；审计不是独立服务端认证或真人有效性证明。
+
+## alpha.6：来源复核与费用边界
+
+新批试使用 `response_protocol=field-bound-v3`，schema哈希取 `attribution_protocol.schema()`，共享指令取该模块 `INSTRUCTIONS`。执行源哈希包括 `attribution_protocol.py`、`attribution_review.py` 和 `plan_review.py`；冻结后不能边跑边改执行源码。
+
+完整生成审计通过后，可运行以下可选套餐复核。它逐批只提交4份可见证据和原候选，不读取 judge；同一模型另起请求上下文，仍不是独立人工评审。
+
+```bash
+python3 scripts/plan_review.py --run-dir /private/tmp/pilot-run --credential-dir /private/tmp/plan-auth --consent-file /private/tmp/consent.json
+python3 -c 'import sys; sys.path.insert(0,"scripts"); import plan_review; print(plan_review.audit("/private/tmp/pilot-run"))'
+```
+
+资料授权必须明确覆盖本批用户、字段、官方目的地及来源复核用途，另在实际同意记录中设 `source_review_approved=true`；旧批次同意和套餐登录都不能自动视为新一批原话外发的同意。未获确认不能自行写 approved=true。
+
+128个生成请求加32个审核请求会更多消耗套餐额度。两阶段顺序执行，共用一个专用OAuth目录，额度或错误立即停止；不购买API积分、不绑卡、不创建API Key、不切收费路径。空资料探针也消耗少量套餐，不能证明整批额度足够。`source-review/`保存原回执、初存索引、审核与派生答案；存在审核计划时不自动续跑，避免不确定请求重扣额度。审计可核对本地完整性，但不是账单审计或服务端独立认证。
+
+普通安装者只需宿主生成与复核，不必使用这个批试适配器。Skill本身不设置收费项目；费用由使用者选择的宿主和模型接入方式决定。官方套餐说明见 [Sign in with ChatGPT](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt)。
+
+### 复核阶段修订与结构失败
+
+结构失败的原始候选不发送来源模型，不补答、不更改；保存 `.rejected.json`，全部留在原始128位置的失败分母。其余合法候选按固定顺序每批最多4份，末批可少于4份，因此实际请求数可少于32。最终有效输出数须单列，不能写成128份全通过。
+
+若生成结束后才发现复核适配器缺少处理结构失败的边界，先保留生成源码和原始哈希，再登记复核阶段配置，通过 `--phase-config` 显式传入。配置绑定原 `run_sha256`、具体 `reason`、`hidden_answers_seen=false` 及 `sources_sha256`；只允许复核适配器本身与原冻结不同，其余执行源码不得变。不能在生成仍进行时修改，也不能修改生成协议、输入或原始结果。报告中必须列为执行修订。

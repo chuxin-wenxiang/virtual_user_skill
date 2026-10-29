@@ -16,6 +16,7 @@ import sys
 import authentic_user as au
 import validation_prep as vp
 import claim_protocol as typed
+import attribution_protocol as field_typed
 
 METRICS = ("fact_accuracy", "traceability", "attitude_direction", "theme_overlap",
            "fabricated_experience_rate", "unknown_restraint")
@@ -231,9 +232,10 @@ def check_common_answer(payload, answer):
     require(isinstance(answer, dict), "Response answer must be an object")
     require(isinstance(answer.get("answer"), str) and answer["answer"].strip(), "Answer text is required")
     require(answer.get("direction") in ("promoter", "passive", "detractor", "unknown"), "Invalid attitude direction")
-    if answer.get("protocol_version") == 2:
+    if answer.get("protocol_version") in (2,3):
         try:
-            expected = typed.render(payload["user_context"]["evidence"], answer.get("wire_answer"))
+            renderer = field_typed if answer.get("protocol_version")==3 else typed
+            expected = renderer.render(payload["user_context"]["evidence"], answer.get("wire_answer"))
         except typed.ProtocolError as exc:
             raise au.InputError(str(exc)) from exc
         require(answer == expected, "Rendered answer differs from original typed wire answer")

@@ -1,10 +1,12 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.5` · 验证状态：**引用结构修复；8人128次完整回归完成，真人效果未获独立验证**
+版本：`2027.0.0-alpha.6` · 验证状态：**归因门禁与新8人留出检查完成，审核仍有漏放和误撤，保留研究预览**
 
-把本地真实用户的历史记录整理为有时间边界的证据包，由 Codex 等支持 Skill 的宿主 AI 生成附引用的模拟回答。本版包含可安装 Skill、零依赖 Python CLI、证据准备、提示词、回答结构检查与合成演示。常规访谈使用宿主 AI；可选套餐适配器使用单独 OAuth 授权，不需要 API Key。真实用户档案不随代码发布。
+把本地个体历史整理为有时间边界的证据包，由宿主模型生成附引用的AI模拟。新增具体字段前提、推断范围、方向依赖，以及只撤回歧义项的来源审核。常规使用无需单独API Key或付费服务；模型费用依宿主接入方式，套餐宿主消耗套餐。真实档案不随代码发布。
 
-旧版 8 人试跑曾发生执行偏离，记录见[alpha.4 试跑报告](references/pilot-20261026.md)。本版将事实原字段与推断分型，并统一生成引用；方法见[证据与推演](references/evidence-reasoning.md)。[本轮8人回归](references/pilot-20261029.md)完整执行128次，结构全通过，仍有6条部分支持的推断；这是可运行的研究预览版，尚未获独立效果验证。安装、命令执行和回归检查通过只代表工程功能可用。群体选人、PMF 量化、指标预测、实时更新、人格建模与因果验证均未包含在首版。
+[新8人报告](references/pilot-20261029-fresh.md)：128次生成、114份合约通过、14份失败；29批来源复核仍留下8条部分支持推断，并误撤部分有界假设。严格态度命中由10/16降为4/16，简单NPS延续基准为8/8；主题有一位目标无原因，7人结果只能探索。不能宣称推断问题已全部解决或预测效果已验证。
+
+[alpha.5同人回归](references/pilot-20261029.md)与[alpha.4执行偏离](references/pilot-20261026.md)保留。工程可用不代表更接近真人；PMF、人格诊断、因果、总体业务概率未验证。
 
 ## 安装
 
@@ -27,8 +29,8 @@ python3 scripts/authentic_user.py doctor --profiles-dir examples/profiles
 python3 scripts/authentic_user.py inspect --profiles-dir examples/profiles --buyer-id demo-rich --cutoff 2026-01-01
 python3 scripts/authentic_user.py prepare --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --industry domestic_hotel --output outputs/demo-memory.json
 python3 scripts/authentic_user.py prompt --bundle outputs/demo-memory.json --output outputs/demo-prompt.txt
-python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-typed-demo.json
-python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.json --answer examples/answer-typed-demo.json --output outputs/demo-answer.rendered.json
+python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-field-demo.json
+python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.json --answer examples/answer-field-demo.json --output outputs/demo-answer.rendered.json
 ```
 
 将 `outputs/demo-prompt.txt` 交给当前宿主 AI，按其中协议生成回答，再用 `render-answer` 读取来源字段统一生成引用，并用 `check-answer` 检查绑定结果。脚本的 `prompt` 命令只生成文本，不会替你调用模型。
@@ -41,12 +43,14 @@ python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.jso
 python3 scripts/authentic_user.py interview --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --output-dir outputs/interview-demo
 ```
 
-命令创建证据包、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，再检查：
+命令创建证据包、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，先检查候选：
 
 ```bash
 python3 scripts/authentic_user.py render-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json --output outputs/interview-demo/answer.rendered.json
 python3 scripts/authentic_user.py check-answer --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.rendered.json
 ```
+
+随后按 [SKILL交付流程](SKILL.md) 用宿主完成来源审核并确定性撤下歧义项；审核也消耗模型额度，不要求另外购买API。
 
 新回答必须携带当前证据包的 `bundle_sha256`，wire_answer 的事实只能选原字段，推断有可见前提、竞争解释及外部更新条件；渲染器统一生成正文与 claims，避免两份清单失配。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
 
@@ -94,13 +98,17 @@ python3 scripts/validation_workflow.py templates --input-dir /private/tmp/pilot-
 
 另可运行 `python3 scripts/validation_prep.py audit-selection` 比较选样口径敏感性；它不改变当前正式筛选规则，也不能替代缺失的历史筛选实现。
 
-## 可选套餐试验
+## 费用与可选套餐试验
+
+Skill本身不收费。默认由当前宿主模型生成及审核：套餐宿主消耗其套餐，按量API宿主依其自身计费。本版没有必须另购API的步骤，也不能承诺所有安装环境都只扣套餐。下面的外部批试是可选入口，来源复核会增加模型用量；额度不够就停，不能自动转付费。
+
+## 批试入口
 
 使用现有 ChatGPT 套餐执行冻结网格的授权、探针、配置及停止规则见[套餐适配器说明](references/chatgpt-plan.md)。仅在明确资料外发授权后执行；不使用按量 API 付费回退。核心 CLI 保持零依赖，OAuth 校验使用可选 `PyJWT[crypto]`。原始证据、响应和凭证均不公开。
 
 ## 引用可靠性与事实/推断边界
 
-本版借鉴2026方法中的证据分层、候选机制/竞争解释和用户配对统计，但不复制内部服务或私有口径。原话仍是历史自述，来源字段忠实提取不证明真实行为；候选机制不是诊断，推断即使格式正确仍需语义复核。没有机制时可明确未知。旧自由文本回答兼容读取并提示复核，新任务优先用 typed-source-v2。
+本版借鉴2026方法中的证据分层、候选机制/竞争解释和用户配对统计，但不复制内部服务或私有口径。原话仍是历史自述，来源字段忠实提取不证明真实行为；候选机制不是诊断，推断即使格式正确仍需语义复核。没有机制时可明确未知。旧自由文本回答兼容读取并提示复核，新任务使用 field-bound-v3，按具体字段归因，交付前做来源语义审核。
 
 ## 检查
 

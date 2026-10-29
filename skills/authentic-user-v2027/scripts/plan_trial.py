@@ -11,6 +11,7 @@ import authentic_user as au
 import chatgpt_plan as cp
 import validation_workflow as vw
 import claim_protocol as typed
+import attribution_protocol as field_typed
 
 
 def execute(run_dir, credential_dir, consent_file):
@@ -38,13 +39,13 @@ def _execute(run_dir, credential_dir, consent_file):
                consent.get('subscription_only') is True and bool(consent.get('human_authorization')), 'Explicit run-bound data transmission consent required')
     transport = config['transport']
     sources=transport.get('execution_sources_sha256',{})
-    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py'}
+    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py','attribution_protocol.py','attribution_review.py','plan_review.py'}
     vw.require(isinstance(sources,dict) and set(sources)<=allowed_sources,'Invalid frozen source list')
     def check_sources():
         for name,expected in sources.items():
             vw.require(hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()==expected,'Executing source changed after freeze')
     check_sources()
-    output_schema = typed.schema() if transport.get('response_protocol') == 'typed-source-v2' else cp.answer_schema()
+    output_schema = field_typed.schema() if transport.get('response_protocol')=='field-bound-v3' else typed.schema() if transport.get('response_protocol')=='typed-source-v2' else cp.answer_schema()
     vw.require(transport.get('output_schema_sha256') == vw.digest(output_schema), 'Frozen schema differs')
     vw.require(transport.get('concurrency') == 1 and transport.get('automatic_retries') == 0 and
                transport.get('execution_order') == 'paired_interleaved_v1', 'Unsupported execution schedule')
@@ -107,10 +108,11 @@ def _execute(run_dir, credential_dir, consent_file):
                         'answer': json.loads(result['text']), 'live_transport': 'official_siwc_responses',
                         'request_body_sha256': result['request_body_sha256']}
             target = root / 'incoming' / (key + '.json')
-            if transport.get('response_protocol') == 'typed-source-v2':
+            if transport.get('response_protocol') in ('typed-source-v2','field-bound-v3'):
                 wire = envelope['answer']
                 try:
-                    envelope['answer'] = typed.render(prompts[call['prompt']]['payload']['user_context']['evidence'], wire)
+                    renderer=field_typed if transport.get('response_protocol')=='field-bound-v3' else typed
+                    envelope['answer'] = renderer.render(prompts[call['prompt']]['payload']['user_context']['evidence'], wire)
                 except typed.ProtocolError as exc:
                     envelope['answer'] = {'protocol_version':2,'wire_answer':wire}
                     envelope['render_error'] = str(exc)

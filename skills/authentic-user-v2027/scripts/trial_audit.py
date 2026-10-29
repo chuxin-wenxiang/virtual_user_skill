@@ -7,6 +7,7 @@ from pathlib import Path
 
 import authentic_user as au
 import claim_protocol as typed
+import attribution_protocol as field_typed
 import chatgpt_plan as cp
 import validation_workflow as vw
 
@@ -14,7 +15,7 @@ import validation_workflow as vw
 def audit(run_dir):
     directory,run,calls,prompts=vw.load_run(run_dir);root=directory.parent
     config=run['model_config'];transport=config['transport']
-    schema=typed.schema() if transport.get('response_protocol')=='typed-source-v2' else cp.answer_schema()
+    schema=field_typed.schema() if transport.get('response_protocol')=='field-bound-v3' else typed.schema() if transport.get('response_protocol')=='typed-source-v2' else cp.answer_schema()
     vw.require(vw.digest(schema)==transport['output_schema_sha256'],'Frozen schema changed')
     ids=set();inputs=outputs=valid=failures=0;finished=[];hashes={}
     for folder in ('attempts','provider-events','incoming','receipt-index'):
@@ -33,7 +34,7 @@ def audit(run_dir):
             value=hashlib.sha256((root/name/(cid+'.json')).read_bytes()).hexdigest()
             vw.require(value==index[field],'Raw evidence changed after first storage');hashes[cid+'/'+name]=value
         wire=json.loads(saved['text'])
-        if transport.get('response_protocol')=='typed-source-v2':
+        if transport.get('response_protocol') in ('typed-source-v2','field-bound-v3'):
             vw.require(envelope['answer'].get('wire_answer')==wire,'Raw wire answer changed')
         else:vw.require(envelope['answer']==wire,'Raw answer changed')
         prompt=vw.safe_path(Path(run['input_dir']),call['prompt']).read_text()

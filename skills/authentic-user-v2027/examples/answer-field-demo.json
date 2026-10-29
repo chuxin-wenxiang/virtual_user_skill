@@ -1,0 +1,44 @@
+{
+  "synthetic": true,
+  "example_kind": "typed_protocol_example_not_model_evaluation",
+  "bundle_sha256": "9edc0567df2fc619d6f73d126fc2203ad5086dac4e3a0cb5b6bb92c60996169e",
+  "answer_mode": "simulation",
+  "wire_answer": {
+    "protocol_version": 3,
+    "facts": [
+      {
+        "evidence_id": "E002",
+        "field": "text"
+      },
+      {
+        "evidence_id": "E004",
+        "field": "text"
+      }
+    ],
+    "inferences": [
+      {
+        "text": "可能更重视预订前的费用和退改信息确定性",
+        "confidence": "medium",
+        "mechanism": "信息不确定性的规避只是候选",
+        "alternative": "退改实际成本或当前信息不足也能解释",
+        "update_condition": "同等条件的真实选择和新的访谈支持其他解释时更新",
+        "premises": [
+          {
+            "evidence_id": "E002",
+            "field": "text"
+          },
+          {
+            "evidence_id": "E004",
+            "field": "text"
+          }
+        ],
+        "scope": "future_condition"
+      }
+    ],
+    "direction": "unknown",
+    "unknowns": [
+      "价格与退改严格优先级未知；投诉赔付经历与金额未知"
+    ],
+    "direction_inference": null
+  }
+}
