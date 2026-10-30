@@ -8,6 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = {
+    "scripts/scope_review.py", "tests/test_scope_review.py", "references/pilot-20261030-scope.md",
     "scripts/clause_review.py", "tests/test_clause_review.py",
     "references/pilot-20261030-clauses.md",
     "scripts/source_registry.py", "scripts/atomic_protocol.py", "scripts/atomic_review.py",

@@ -7,6 +7,7 @@ import authentic_user as au,attribution_protocol as ap,validation_workflow as vw
 import test_validation_workflow as fm
 import atomic_protocol as atomic, source_registry as sr
 import clause_review as cr
+import scope_review as scope
 class PlanReviewTests(unittest.TestCase):
  def test_complete_source_only_review_preserves_candidates_and_detects_tamper(self):
   self.lifecycle(False)
@@ -22,6 +23,10 @@ class PlanReviewTests(unittest.TestCase):
   self.lifecycle(False,"atomic-bound-v4",source_protocol=cr.NAME)
  def test_clause_contract_failure_is_pending_without_poisoning_other_candidates(self):
   self.lifecycle(False,"atomic-bound-v4",source_protocol=cr.NAME,clause_invalid=True)
+ def test_scope_review_complete_lifecycle_with_roles(self):
+  self.lifecycle(False,"atomic-bound-v4",source_protocol=scope.NAME)
+ def test_scope_contract_failure_remains_pending(self):
+  self.lifecycle(False,"atomic-bound-v4",source_protocol=scope.NAME,clause_invalid=True)
  def lifecycle(self,invalid,protocol_name="field-bound-v3",review_invalid=False,batch_invalid=False,source_protocol=None,clause_invalid=False):
   f=fm.ValidationWorkflowTests();f.setUp()
   try:
@@ -50,9 +55,13 @@ class PlanReviewTests(unittest.TestCase):
     if instructions!='synthetic' and protocol_name=='atomic-bound-v4':
      for row,task in zip(wire['reviews'],json.loads(prompt)['tasks']):
       row['items']=[{'atom_index':i,'verdict':'bounded_hypothesis','issue':'none','used_refs':[a['ref'] for a in atom['anchors']],'missing_refs':[],'problem_span':'','reason':'Synthetic bounded hypothesis'} for i,atom in enumerate(task['candidate']['atoms'])]
-      if source_protocol==cr.NAME:
+      if source_protocol in (cr.NAME,scope.NAME):
        row['review_version']=2
        row['items']=[{'atom_index':i,'clauses':[{'clause_index':j,'premise':'grounded','scope':'within_source','inference':'bounded_hypothesis','source_refs':list(dict.fromkeys(a['ref'] for a in atom['anchors'])),'issue':'none','problem_span':'','reason':'Synthetic grounded and bounded check.'} for j,_ in enumerate(cr.clauses(atom['text']))]} for i,atom in enumerate(task['candidate']['atoms'])]
+       if source_protocol==scope.NAME:
+        row['review_version']=3
+        for item in row['items']:
+         for c in item['clauses']:c['role']='future_condition' if c['clause_index']==0 else 'future_consequence'
        if clause_invalid and not damaged and row['items']:
         row['items'][0]['clauses'][0]['clause_index']=11;damaged.append(True)
     if instructions!='synthetic' and review_invalid and len(counter)==65:wire['reviews'][0]['wire_sha256']='wrong-candidate'

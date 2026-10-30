@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "用本地个体历史档案生成有证据边界的模拟访谈，分开历史自述、来源字段与本次推断，并校验引用。适用于明确要求 v2027、个体记忆模拟或按真实用户 ID 访谈；需要授权本地档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.8"
+  version: "2027.0.0-alpha.9"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -51,18 +51,18 @@ python3 scripts/authentic_user.py check-answer --bundle /private/tmp/user-interv
 
 预检只撤回，不改写正文判断；如果方向依赖坏条目则转unknown。原始严格合约通过情况和原文件哈希保留在precheck.json。全局包绑定或无法安全拆分的错误会停止；不能让坏条目连带删掉其他合法判断。`render-answer`仍提供严格整体渲染，不能把派生预检通过冒称原始全通过。
 
-不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.6 合法证据包与旧协议仍可读取；新任务使用 atomic-bound-v4，旧自由文本仍需人工语义复核。话题词表仅形成审核提示，不据关键词数量或未匹配词自动否定来源支持。字段存在和原文匹配只能解决工程错误，不能证明自然语言语义成立。
+不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.8 合法证据包与旧协议仍可读取；新任务使用 atomic-bound-v4，旧自由文本仍需人工语义复核。话题词表仅形成审核提示，不据关键词数量或未匹配词自动否定来源支持。字段存在和原文匹配只能解决工程错误，不能证明自然语言语义成立。
 
 ## 交付与语义检查
 
-原始候选通过结构检查后，必须再做来源语义复核。新任务使用clause-bound-v2：脚本提供每条判断的全部前提编号、分句和来源日期，审核只看这些完整字段及候选，不看隐藏答案。每个分句分别检查premise、scope和inference：概括须忠实，合理假设须有界，明示和隐含的既有状态也须核对。每个脚本分句都检查一次，不能只看并列主张中的一半。来源编号由脚本提供，不要求在facts重复，也不让审核者另造“缺失编号”。
+原始候选通过结构检查后，必须再做来源语义复核。新任务使用scope-bound-v3：脚本提供全部前提编号、完整分句和来源日期，审核只看本判断选中的字段，不看隐藏答案。每句先区分历史断言、话题假设、未来条件、未来反应和证据边界，再检查premise、scope和inference。概括须忠实，假设须有界，不能把未来条件当已发生；“改善/转为”不自动预设坏体验或既往推荐。历史延续中的具体属性仍须有据，信号与网速等不直接等同。每句都检查一次，不能漏掉并列主张或借其他判断补证。
 
 ```bash
-python3 scripts/clause_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --output /private/tmp/user-interview/review-prompt.txt
-python3 scripts/clause_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --review /private/tmp/user-interview/review.json --audit-output /private/tmp/user-interview/review-audit.json --output /private/tmp/user-interview/answer.final.json
+python3 scripts/scope_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --output /private/tmp/user-interview/review-prompt.txt
+python3 scripts/scope_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --review /private/tmp/user-interview/review.json --audit-output /private/tmp/user-interview/review-audit.json --output /private/tmp/user-interview/answer.final.json
 ```
 
-`finalize`只有全部分句的前提和范围通过、且推断类型匹配时才保留原判断，不改写候选、不重生成。坏分句使该atom撤下，其他合法atom继续保留；方向依赖项撤下则变unknown。审核合约错误另列review_pending及审计，不能把审核者漏查当作候选语义错误；有待完成项时退出码2。全局哈希或原子覆盖不符停止。保留原候选、审核与最终派生结果。未完成审核的判断不交付，模型审核不等于独立人工认证。旧atomic_review.py仍供alpha.7冻结运行复现。
+`finalize`只有全部分句的前提、范围和类型通过才保留原判断，不改写候选。任何被识别为证据边界的自由句整条按政策撤下，改用固定限域unknowns；“未说明/无法确认”不要混入atoms，纯未来否定条件仍可表达。审核角色由模型判断，脚本不能独立理解所有自然语言；边界政策撤回、语义拒绝和合约待完成分别记审计。坏atom不影响其他合法atom，方向依赖撤下则变unknown。合约错误标review_pending、暂不交付，退出码2；全局哈希或覆盖不符停止。保留原候选、审核与派生；模型审核不等于独立人工认证。旧atomic_review.py/clause_review.py分别保留旧审核格式，历史冻结运行使用自己的源码快照。
 
 向使用者交付最终回答、来源、推断和未知边界，标研究预览版。逐条检查推断与它引用的前提是否支持、是否把退款当赔付、把评价当真实行为、把候选心理当成确诊；标成 inference 也不能豁免虚构过去经历。
 
@@ -76,7 +76,9 @@ python3 scripts/clause_review.py finalize --bundle /private/tmp/user-interview/e
 
 生成模型只能收到 inputs，不能收到 judge。单进程锁、排他创建和逐调用不可覆盖回执索引保留原始 wire、检查失败及用量；完成后运行 trial_audit.py 检查完整网格、无重叠、唯一回执与计数对账。v3/v4的可选 plan_review.py 在另一个模型上下文中每批审核4份候选，不接收隐藏答案；原始和派生结果分别计分，撤回率与覆盖率必须同时报告。真实失败不从总分母消失，不能挑选替代答案；当前 assistant 评分标 assistant_review，不能冒称独立人工。
 
-[本轮分句归因与新8人结果](references/pilot-20261030-clauses.md)：129项工程检查通过、合成开发回归21/21。新8人128次生成完成，原始严格102通过；来源32次尝试有31批完整响应、124份有效派生、4份缺失未补发。最终仍有3条部分支持判断、5条模型误撤。记忆Q2命中9/16，最近同业NPS延续8/8人，未证明预测增益。研究预览状态保留，未知覆盖不能从少数字段扩张到全历史。
+[本轮范围边界与验证记录](references/pilot-20261030-scope.md)：139项工程检查通过；合成开发回归15/16后补足前提并增反例，第二轮20/20。新8人128次生成已完成，原始严格108通过、20失败；来源第3批连接错误即停，仅8份派生、120份缺失，未重试。原始判断仍18条部分支持、3条不支持，记忆Q2命中6/16，最近同业NPS延续7/8人。本轮完整验证未完成，不能声称问题全部解决或预测优于简单基线。
+
+[alpha.8新8人结果](references/pilot-20261030-clauses.md)：128生成、124最终派生、4份缺失，仍3条部分支持及原评分5条误撤。新复核将其中1条属性边界列争议，不改旧评分，也不强制保留来刷分；3条越界未知转固定说明，4条明确未来误撤列回归。研究预览状态保留。
 
 [alpha.7新8人](references/pilot-20261029-atomic.md)完成128次生成，原始严格27通过、101失败；32次来源审核尝试中31批有完整响应，123份有效派生回答仍含8条部分支持判断。记忆Q2命中5/16，简单最近同业NPS延续8/8人；未证明复杂模拟更有效。词表误拦截和同字段多引文修正仅做事后本地回放，结构通过78/128，不能当作新效果验证。113项工程检查通过，继续保留预览。
 

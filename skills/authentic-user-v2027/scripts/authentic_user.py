@@ -14,8 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.8"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", VERSION}
+VERSION = "2027.0.0-alpha.9"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -334,7 +334,7 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", VERSION))
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", VERSION))
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
     return bundle

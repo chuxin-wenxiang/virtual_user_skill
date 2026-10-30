@@ -156,7 +156,7 @@ def model_config(config):
                 transport.get("billing_policy") == "subscription_only_no_paid_fallback", "Invalid plan-only route policy")
         require(transport.get("reasoning_effort") == "low" and transport.get("revision_policy") == "provider_alias_exploratory",
                 "Plan pilot must record supported effort and unpinned alias limitation")
-        require(transport.get('source_review_protocol') in (None,'clause-bound-v2'),'Unknown source review protocol')
+        require(transport.get('source_review_protocol') in (None,'clause-bound-v2','scope-bound-v3'),'Unknown source review protocol')
         if transport.get('source_review_protocol'):
             require(transport.get('response_protocol')=='atomic-bound-v4','Clause review requires atomic generation')
         if 'source_review_model' in transport:

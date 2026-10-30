@@ -40,7 +40,7 @@ def _execute(run_dir, credential_dir, consent_file):
                consent.get('subscription_only') is True and bool(consent.get('human_authorization')), 'Explicit run-bound data transmission consent required')
     transport = config['transport']
     sources=transport.get('execution_sources_sha256',{})
-    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py','attribution_protocol.py','attribution_review.py','plan_review.py','source_registry.py','atomic_protocol.py','atomic_review.py','clause_review.py'}
+    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py','attribution_protocol.py','attribution_review.py','plan_review.py','source_registry.py','atomic_protocol.py','atomic_review.py','clause_review.py','scope_review.py'}
     vw.require(isinstance(sources,dict) and set(sources)<=allowed_sources,'Invalid frozen source list')
     def check_sources():
         for name,expected in sources.items():
