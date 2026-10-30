@@ -100,6 +100,12 @@ def audit_inputs(input_dir):
         require(text_digest(header) == manifest.get("shared_instructions_sha256"), "Shared instructions changed")
         if protocol.get("response_protocol") == "atomic-bound-v4":
             require(payload["user_context"].get("source_catalogue") == sr.catalogue(payload["user_context"]["evidence"]), "Derived source catalogue differs from visible evidence")
+        if protocol.get('source_map_protocol') is not None:
+            require(protocol['source_map_protocol'] == sr.MAP_VERSION, 'Unsupported source map protocol')
+            require(protocol.get('response_protocol') == 'atomic-bound-v4', 'Source maps require atomic answers')
+            require(payload['user_context'].get('source_map') == sr.record_map(payload['user_context']['evidence']), 'Source map differs from selected records')
+        else:
+            require('source_map' not in payload['user_context'], 'Unregistered source map in frozen input')
         prompts[path] = {"sha256": record["sha256"], "payload": payload}
     require(manifest.get("unique_prompts") == len(prompts), "Prompt count mismatch")
     calls, keys, cases = [], set(), set()

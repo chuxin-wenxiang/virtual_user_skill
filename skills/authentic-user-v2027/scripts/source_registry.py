@@ -22,6 +22,12 @@ TOPICS = {
     'battery': r'电量|续航|充电|battery',
 }
 RANKING = re.compile(r'主要|最看重|最关心|最在意|高频|频繁|经常|多次|反复|较多|更多次|最高|最多|最少|排名|占比|频率')
+MAP_VERSION = 'record-fields-v1'
+MAP_INSTRUCTIONS = '''记录关联表source_map只连接同一E记录中确实存在的F字段，不把同日、同分或同一行业的不同记录合成同一事件。
+写判断前按source_map核对全部前提：提到调查分数必须另选score字段，提到原话主题或属性必须选相应text/tags字段；单个分数不支持退订、费用、服务等具体主题。
+同一条原话可能与当时评分不一致，应保留这种不一致，不用其中一个覆盖另一个；跨记录趋势必须选择涉及的各条记录。
+字段关联只帮助找到来源，不会自动替你补引用，也不证明自然语言受支持。只选所需字段；所选记录不是完整人生历史，未选字段和未提及经历都不能推成不存在。
+'''
 
 def topics(text):
     return {k for k, pattern in TOPICS.items() if re.search(pattern, text, re.I)}
@@ -58,6 +64,21 @@ def catalogue(evidence):
 def lookup(evidence):
     book = catalogue(evidence)
     return {x['ref']: x for group in book.values() for x in group}
+
+def record_map(evidence):
+    """Join fields only within one source row, without repeating field values."""
+    book = catalogue(evidence)
+    fields = {row['id']: {} for row in evidence}
+    for item in book['fields']:
+        fields[item['evidence_id']][item['field']] = item['ref']
+    return {'version': MAP_VERSION,
+            'association_scope': 'same_source_record_only; no cross-record event linkage',
+            'coverage_scope': 'selected_records_only; no absence or complete-history certification',
+            'records': [{'evidence_id': row['id'], 'record_kind': row['kind'],
+                         'date': row.get('date'), 'industry': row.get('industry'),
+                         'source_field': row.get('source_field'),
+                         'source_record_sha256': row.get('source_record_sha256'),
+                         'fields': fields[row['id']]} for row in evidence]}
 
 def value_text(item):
     value = item['value']

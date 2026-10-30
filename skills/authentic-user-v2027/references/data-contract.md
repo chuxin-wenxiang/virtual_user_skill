@@ -31,6 +31,8 @@ PROFILES_DIR/
 
 同一参评的分数标签与原话通常分列于两个数组，保留为不同证据，不凭相同日期擅自合并，避免把他条反馈附到错误事件上。完全相同的规范化记录去重。摘要的参评条数和均分只计算选中的 survey 记录，不把原话再当一次参评。
 
+alpha.10在证据包内增加`source_map`（record-fields-v1）：按同一E记录列出kind、日期、行业、原来源字段、记录哈希及F编号映射；不复制字段值，不关联不同记录为同一事件。与目录一样，只从所选可见记录计算，包哈希和验证器核对映射一致；新包缺失或篡改映射会拒绝，旧alpha.1–alpha.9包无此字段仍可读取。访谈目录的source-map.json只是查看副本，以evidence.json内映射为准。关联不能代替模型显式选取所需字段，也不验证原始自述真实或推断成立。
+
 支持行业：`airplane` 国内机票、`domestic_hotel` 国内酒店、`intl_flight` 国际机票、`intl_hotel` 境外酒店、`intl_vacation` 国际度假、`rental` 租车、`train` 火车票、`vacation_route` 国内度假线路、`vacation_ticket` 国内度假门票。未知行业枚举和日期不可解析的记录不进入模型输入。
 
 ## 时间与检索

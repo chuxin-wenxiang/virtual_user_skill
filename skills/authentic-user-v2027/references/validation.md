@@ -197,3 +197,10 @@ alpha.6两条件共同使用 field-bound-v3，冻结同一schema、指令、模�
 新冻结配置设source_review_protocol=scope-bound-v3，增加scope_review.py执行源哈希；生成仍为atomic-bound-v4。新审核有review_version=3及每句role，不能与v2混用。未来条件、历史断言和证据边界分开；policy_withdrawals记录固定未知政策撤回，与语义拒绝和review_pending分列，报告保留与损失。
 
 排除前4批全部32人选另8人，任何新用户请求前固定全部配置和15个执行源。真实原话及审核候选需要该批范围授权，既有套餐授权不替代资料外发授权。生成/审核不看隐藏后续答案；仅现有套餐、额度或传输错误停止，不自动重试，不用付费回退。合成开发第一轮15/16、补足合成前提并增反例后20/20，失败和准备错误原样保留，不冒称独立验证。
+
+
+## alpha.10：字段关联与离线清单
+
+现代atomic准备会登记source_map_protocol=record-fields-v1，并给两条件相同的同记录字段选择指导。输入审计重算source_map，与来源目录和实际所选记录核对，不合并同日记录或自动补上未选前提。旧输入无映射仍可审计；legacy reframe仅支持未带映射的旧材料，避免静默丢弃契约。记录检索排序未改变。
+
+中断时用validation_report.py status只读列出响应、未知请求、未尝试与最终缺失；它不续跑，也不替代trial_audit.py或plan_review.audit。模型阶段结束后，用attitude --model-phases-ended --phase original或source-final读取本地judge，输出全部Q2位置命中、覆盖、条件命中与简单基线，按用户比较。它只做事后描述，不代替独立语义评分，也不能把缺失最终结果当作预测变差的证据。命令、单位与本轮离线核对见[alpha.10离线记录](offline-20261031-evidence-map.md)。

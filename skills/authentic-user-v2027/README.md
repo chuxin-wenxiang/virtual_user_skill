@@ -1,10 +1,12 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.9` · 验证状态：**研究预览；本轮验证状态见结果报告**
+版本：`2027.0.0-alpha.10` · 验证状态：**研究预览；工程改进未经新模型效果验证**
 
 把本地个体历史整理为有时间边界的证据包，由宿主模型生成附引用的AI模拟。新增逐条判断、脚本来源目录与完整统计、概括/假设分开审核及最小撤回。常规使用无需单独API Key；套餐宿主消耗其套餐额度，审核增加用量。真实档案不随代码发布。
 
-本版新增scope-bound-v3，区分历史断言、未来条件和证据边界；被识别的缺资料自由句按政策撤回，固定未知说明限于所选来源。139项离线检查通过；合成开发回归15/16后补足前提并增反例，第二轮20/20。新8人128次生成完成（原始严格108通过、20失败），来源第3批连接错误后按约停止，仅完成8/128份，未重试。全部原始判断仍有18条部分支持、3条不支持；记忆态度6/16低于最近NPS延续7/8人。完整验证未完成，保留研究预览，详见[完整结果与限制](references/pilot-20261030-scope.md)。
+本版新增同记录字段关联表、只读中断清单及Q2简单基线报告。映射不合并同日事件、不自动补前提、不认证语义；记录检索排序保持原样。新增17项针对性检查，全套156项通过；只用已结束试验做本地核对，0次新增模型请求，没有新用户效果结果。见[alpha.10离线改进与剩余工作](references/offline-20261031-evidence-map.md)。
+
+最近实测alpha.9使用scope-bound-v3，区分历史断言、未来条件和证据边界；新8人128次生成完成（原始严格108通过、20失败），来源第3批连接错误后按约停止，仅完成8/128份，未重试。全部原始判断仍有18条部分支持、3条不支持；记忆态度6/16低于最近NPS延续14/16。完整验证未完成，保留研究预览，详见[完整结果与限制](references/pilot-20261030-scope.md)。
 
 [本轮逐条归因检查](references/pilot-20261029-atomic.md)：新8人128次生成，原始严格27通过、101失败；32次来源审核尝试取得31批完整响应、123份有效派生回答，仍有8条部分支持判断。记忆态度题5/16命中，简单最近同业NPS延续8/8人。修正词表误拦截和多引文规则后，本地结构回放78/128通过；这不是新的模型效果验证。113项离线工程检查通过，继续保留研究预览。
 
@@ -45,7 +47,7 @@ python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.jso
 python3 scripts/authentic_user.py interview --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --output-dir outputs/interview-demo
 ```
 
-命令创建证据包、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，先按条目预检候选并保存原始失败记录：
+命令创建证据包、同记录字段关联表source-map.json、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，先按条目预检候选并保存原始失败记录：
 
 ```bash
 python3 scripts/plan_review.py precheck --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json --output outputs/interview-demo/answer.checked.json --audit-output outputs/interview-demo/precheck.json

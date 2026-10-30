@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "用本地个体历史档案生成有证据边界的模拟访谈，分开历史自述、来源字段与本次推断，并校验引用。适用于明确要求 v2027、个体记忆模拟或按真实用户 ID 访谈；需要授权本地档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.9"
+  version: "2027.0.0-alpha.10"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -21,7 +21,7 @@ python3 scripts/authentic_user.py doctor
 python3 scripts/authentic_user.py interview --buyer-id USER_ID --question '你最在意哪些体验？' --output-dir /private/tmp/user-interview
 ```
 
-命令创建 evidence.json、prompt.txt、answer.template.json、run.json；模板不是已生成回答。时间回测加 `--cutoff '2026-01-01'`，排除该时点及之后记录；无时区日期按上海零点解释。行业及字段见[数据契约](references/data-contract.md)。不读取全历史 L2 汇总、L3/L4 或无历史时点的人口画像，不为更像真人恢复被排除字段。
+命令创建 evidence.json、source-map.json、prompt.txt、answer.template.json、run.json；模板不是已生成回答。时间回测加 `--cutoff '2026-01-01'`，排除该时点及之后记录；无时区日期按上海零点解释。行业及字段见[数据契约](references/data-contract.md)。不读取全历史 L2 汇总、L3/L4 或无历史时点的人口画像，不为更像真人恢复被排除字段。
 
 ## 生成前与生成中
 
@@ -31,6 +31,8 @@ python3 scripts/authentic_user.py interview --buyer-id USER_ID --question '你�
 2. 根据实际利益和证据提出条件性反应。机制只能是候选，保留竞争解释及外部反证条件；不按群体标签安排心理，不用新模拟证明机制。
 3. 遵守能力档位：individual_memory 可有限个体模拟；limited_attitude 只作有条件表达；facts_only 只摘要来源、不推断；insufficient 明确未知。档位只是未验证的资料深度启发式；空栏目和乱码不升级能力。
 4. 第一人称明确标 AI 模拟，不代表本人新答。不编购买、投诉、赔付、确切金额或其他过去经历。NPS 0 分合法，不能自动剔除；未提某经历不等于从未发生。
+
+alpha.10 的 source_map 按同一 E 记录列出真实存在的 F 字段及来源哈希，帮助逐条选全前提；证据包内的映射是校验依据，source-map.json是便于查看的副本。提分数要选score，提主题或属性要选相应text/tags；单个0分不能支持退订等具体主题。同日的调查和原话不合并，评分与文本冲突保留；映射不自动补引用，也不判定语义。记录检索排序未改变，缺失信息仍用固定unknowns。
 
 ## 一份结构化回答，一次生成引用
 
@@ -51,7 +53,7 @@ python3 scripts/authentic_user.py check-answer --bundle /private/tmp/user-interv
 
 预检只撤回，不改写正文判断；如果方向依赖坏条目则转unknown。原始严格合约通过情况和原文件哈希保留在precheck.json。全局包绑定或无法安全拆分的错误会停止；不能让坏条目连带删掉其他合法判断。`render-answer`仍提供严格整体渲染，不能把派生预检通过冒称原始全通过。
 
-不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.8 合法证据包与旧协议仍可读取；新任务使用 atomic-bound-v4，旧自由文本仍需人工语义复核。话题词表仅形成审核提示，不据关键词数量或未匹配词自动否定来源支持。字段存在和原文匹配只能解决工程错误，不能证明自然语言语义成立。
+不改原始模型回答；失败保留，不重试到成功。渲染后正文若手改会校验失败。alpha.1–alpha.9 合法证据包与旧协议仍可读取；新任务使用 atomic-bound-v4，旧自由文本仍需人工语义复核。话题词表仅形成审核提示，不据关键词数量或未匹配词自动否定来源支持。字段存在和原文匹配只能解决工程错误，不能证明自然语言语义成立。
 
 ## 交付与语义检查
 
@@ -75,6 +77,8 @@ python3 scripts/scope_review.py finalize --bundle /private/tmp/user-interview/ev
 准备和评审读[验证流程](references/validation.md)，套餐执行读[适配器说明](references/chatgpt-plan.md)。先取得对应资料传输授权，再用官方 OAuth 套餐、空资料探针和同一冻结配置；不读取 API Key，不充值或付费回退，额度/传输错误停止。
 
 生成模型只能收到 inputs，不能收到 judge。单进程锁、排他创建和逐调用不可覆盖回执索引保留原始 wire、检查失败及用量；完成后运行 trial_audit.py 检查完整网格、无重叠、唯一回执与计数对账。v3/v4的可选 plan_review.py 在另一个模型上下文中每批审核4份候选，不接收隐藏答案；原始和派生结果分别计分，撤回率与覆盖率必须同时报告。真实失败不从总分母消失，不能挑选替代答案；当前 assistant 评分标 assistant_review，不能冒称独立人工。
+
+中断或尚未跑完时，用`validation_report.py status`只读核对生成、审核和缺失清单；它不续跑，不替代完整审计。模型阶段结束且执行锁已处理后，才能用`attitude --model-phases-ended`读取本地judge，按全部Q2位置输出覆盖、条件命中、总命中及最近同业NPS和三个固定类别基线。输出明确标事后描述，不将缺失最终答案解释成预测能力变差。命令与限制见[离线改进记录](references/offline-20261031-evidence-map.md)。alpha.10新增17项针对性检查，全套156项通过；没有新增模型请求或新用户效果验证。
 
 [本轮范围边界与验证记录](references/pilot-20261030-scope.md)：139项工程检查通过；合成开发回归15/16后补足前提并增反例，第二轮20/20。新8人128次生成已完成，原始严格108通过、20失败；来源第3批连接错误即停，仅8份派生、120份缺失，未重试。原始判断仍18条部分支持、3条不支持，记忆Q2命中6/16，最近同业NPS延续7/8人。本轮完整验证未完成，不能声称问题全部解决或预测优于简单基线。
 

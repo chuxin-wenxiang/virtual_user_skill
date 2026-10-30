@@ -14,8 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.9"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", VERSION}
+VERSION = "2027.0.0-alpha.10"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -255,6 +255,8 @@ def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24
         ],
         "evidence": evidence,
     }
+    import source_registry as sr
+    result['source_map'] = sr.record_map(evidence)
     result["bundle_sha256"] = bundle_digest(result)
     return result
 
@@ -334,9 +336,13 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", VERSION))
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", VERSION))
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
+    if bundle['skill_version'] == VERSION or 'source_map' in bundle:
+        import source_registry as sr
+        if bundle.get('source_map') != sr.record_map(evidence):
+            raise InputError('Source map does not match selected source records')
     return bundle
 
 
@@ -356,7 +362,7 @@ def render_prompt(bundle):
     import atomic_protocol as typed
     import source_registry as sr
     return ("全真用户 v2027 研究预览版。只依据下面证据包及能力档位回答；facts_only不能推断，insufficient明确未知。\n"
-            + typed.INSTRUCTIONS + "\n输出一个绑定包：bundle_sha256、answer_mode、wire_answer。"
+            + typed.INSTRUCTIONS + (sr.MAP_INSTRUCTIONS if 'source_map' in bundle else '') + "\n输出一个绑定包：bundle_sha256、answer_mode、wire_answer。"
             "answer_mode依能力为simulation/facts_summary/insufficient_evidence。wire_answer结构：\n"
             + json.dumps(typed.schema(), ensure_ascii=False, indent=2)
             + "\n来源目录：" + json.dumps(sr.catalogue(bundle["evidence"]), ensure_ascii=False)
@@ -512,9 +518,9 @@ def create_interview(root, buyer_id, question, output_dir, cutoff=None, industry
                 "bundle_sha256": bundle["bundle_sha256"],
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                 "evidence_file": "evidence.json", "prompt_file": "prompt.txt",
-                "template_file": "answer.template.json", "answer_file": "answer.json",
+                "template_file": "answer.template.json", "answer_file": "answer.json", "source_map_file": "source-map.json",
                 "model_called": False, "validation_status": "experimental_unvalidated"}
-    for name, value in (("evidence.json", bundle), ("answer.template.json", template), ("run.json", manifest)):
+    for name, value in (("evidence.json", bundle), ("source-map.json", bundle['source_map']), ("answer.template.json", template), ("run.json", manifest)):
         write_new(str(directory / name), json.dumps(value, ensure_ascii=False, indent=2) + "\n")
     write_new(str(directory / "prompt.txt"), prompt)
     return {"ok": True, "directory": str(directory), "status": manifest["status"],

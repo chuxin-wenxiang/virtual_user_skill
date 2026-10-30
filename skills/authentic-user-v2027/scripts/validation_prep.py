@@ -222,8 +222,10 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
                         scoring="Separate source-only model review; local held-out outcomes; not independent human validation")
     if response_protocol == "atomic-bound-v4":
         import atomic_protocol as atomic
-        shared = atomic.INSTRUCTIONS + "\nINPUT_JSON:\n"
+        import source_registry as sr
+        shared = atomic.INSTRUCTIONS + sr.MAP_INSTRUCTIONS + "\nINPUT_JSON:\n"
         protocol.update(protocol_version="fresh-user-atomic-bound-v4", response_protocol=response_protocol,
+                        source_map_protocol=sr.MAP_VERSION,
                         target_factor_screen="explicit lexical topic beyond generic praise; not semantic certification")
     protocol["pilot_excludes_zero"] = not include_zero
     protocol["repeats_per_question_condition"] = repeats
@@ -261,6 +263,7 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
                 if response_protocol == "atomic-bound-v4":
                     import source_registry as sr
                     payload["user_context"]["source_catalogue"] = sr.catalogue(data)
+                    payload["user_context"]["source_map"] = sr.record_map(data)
                 prompt = shared + json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
                 relative = f"{case}/{label}/{qid}.txt"
                 au.write_new(str(inputs / relative), prompt)
@@ -301,6 +304,7 @@ def reframe(source_dir, output_dir):
     import validation_workflow as workflow
     import claim_protocol as typed
     source,old_manifest,old_protocol,calls,prompts=workflow.audit_inputs(source_dir)
+    workflow.require(not old_protocol.get('source_map_protocol'), 'Legacy reframe does not support mapped atomic inputs; prepare a new mapped run instead of silently dropping its contract')
     target=workflow.new_dir(output_dir)
     protocol=dict(old_protocol)
     protocol.update(protocol_version="historical-tags-typed-v2-regression",response_protocol="typed-source-v2",
