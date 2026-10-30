@@ -2,7 +2,7 @@
 name: authentic-user-v2027
 description: "用本地个体历史档案生成有证据边界的模拟访谈，分开历史自述、来源字段与本次推断，并校验引用。适用于明确要求 v2027、个体记忆模拟或按真实用户 ID 访谈；需要授权本地档案，不附带真实用户数据。"
 metadata:
-  version: "2027.0.0-alpha.7"
+  version: "2027.0.0-alpha.8"
   validation-status: "experimental-unvalidated"
 ---
 
@@ -55,14 +55,14 @@ python3 scripts/authentic_user.py check-answer --bundle /private/tmp/user-interv
 
 ## 交付与语义检查
 
-原始候选通过结构检查后，必须再做来源语义复核。宿主读取以下审核提示，只看可见证据和候选，不看隐藏答案；来源概括用supported，合理有界假设用bounded_hypothesis；歧义或无支持项用ambiguous/unsupported，逐条指定问题种类、候选中的原文片段及真实缺失F编号，保存review.json。已选字段不能被称为缺失。
+原始候选通过结构检查后，必须再做来源语义复核。新任务使用clause-bound-v2：脚本提供每条判断的全部前提编号、分句和来源日期，审核只看这些完整字段及候选，不看隐藏答案。每个分句分别检查premise、scope和inference：概括须忠实，合理假设须有界，明示和隐含的既有状态也须核对。每个脚本分句都检查一次，不能只看并列主张中的一半。来源编号由脚本提供，不要求在facts重复，也不让审核者另造“缺失编号”。
 
 ```bash
-python3 scripts/atomic_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --output /private/tmp/user-interview/review-prompt.txt
-python3 scripts/atomic_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --review /private/tmp/user-interview/review.json --output /private/tmp/user-interview/answer.final.json
+python3 scripts/clause_review.py prompt --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --output /private/tmp/user-interview/review-prompt.txt
+python3 scripts/clause_review.py finalize --bundle /private/tmp/user-interview/evidence.json --answer /private/tmp/user-interview/answer.checked.json --review /private/tmp/user-interview/review.json --audit-output /private/tmp/user-interview/review-audit.json --output /private/tmp/user-interview/answer.final.json
 ```
 
-`finalize` 只保留获支持概括和合理有界的原假设，不改写候选、不重生成；逐条撤下歧义和无支持项，若承载方向的推断被撤，方向改为 unknown。保留原候选、审核和最终派生结果。未完成审核的回答只能标候选。审核可由当前宿主执行，单独上下文更利于减少自证，但不等于独立人工认证。
+`finalize`只有全部分句的前提和范围通过、且推断类型匹配时才保留原判断，不改写候选、不重生成。坏分句使该atom撤下，其他合法atom继续保留；方向依赖项撤下则变unknown。审核合约错误另列review_pending及审计，不能把审核者漏查当作候选语义错误；有待完成项时退出码2。全局哈希或原子覆盖不符停止。保留原候选、审核与最终派生结果。未完成审核的判断不交付，模型审核不等于独立人工认证。旧atomic_review.py仍供alpha.7冻结运行复现。
 
 向使用者交付最终回答、来源、推断和未知边界，标研究预览版。逐条检查推断与它引用的前提是否支持、是否把退款当赔付、把评价当真实行为、把候选心理当成确诊；标成 inference 也不能豁免虚构过去经历。
 
@@ -76,6 +76,8 @@ python3 scripts/atomic_review.py finalize --bundle /private/tmp/user-interview/e
 
 生成模型只能收到 inputs，不能收到 judge。单进程锁、排他创建和逐调用不可覆盖回执索引保留原始 wire、检查失败及用量；完成后运行 trial_audit.py 检查完整网格、无重叠、唯一回执与计数对账。v3/v4的可选 plan_review.py 在另一个模型上下文中每批审核4份候选，不接收隐藏答案；原始和派生结果分别计分，撤回率与覆盖率必须同时报告。真实失败不从总分母消失，不能挑选替代答案；当前 assistant 评分标 assistant_review，不能冒称独立人工。
 
-[本轮新8人](references/pilot-20261029-atomic.md)完成128次生成，原始严格27通过、101失败；32次来源审核尝试中31批有完整响应，123份有效派生回答仍含8条部分支持判断。记忆Q2命中5/16，简单最近同业NPS延续8/8人；未证明复杂模拟更有效。词表误拦截和同字段多引文修正仅做事后本地回放，结构通过78/128，不能当作新效果验证。113项工程检查通过，继续保留预览。
+[本轮分句归因与新8人结果](references/pilot-20261030-clauses.md)：129项工程检查通过、合成开发回归21/21。新8人128次生成完成，原始严格102通过；来源32次尝试有31批完整响应、124份有效派生、4份缺失未补发。最终仍有3条部分支持判断、5条模型误撤。记忆Q2命中9/16，最近同业NPS延续8/8人，未证明预测增益。研究预览状态保留，未知覆盖不能从少数字段扩张到全历史。
+
+[alpha.7新8人](references/pilot-20261029-atomic.md)完成128次生成，原始严格27通过、101失败；32次来源审核尝试中31批有完整响应，123份有效派生回答仍含8条部分支持判断。记忆Q2命中5/16，简单最近同业NPS延续8/8人；未证明复杂模拟更有效。词表误拦截和同字段多引文修正仅做事后本地回放，结构通过78/128，不能当作新效果验证。113项工程检查通过，继续保留预览。
 
 [alpha.6留出检查](references/pilot-20261029-fresh.md)、[旧同人回归](references/pilot-20261029.md)和[执行偏离](references/pilot-20261026.md)分别保留；真实失败、方案修订及未完成审核不从分母消失。

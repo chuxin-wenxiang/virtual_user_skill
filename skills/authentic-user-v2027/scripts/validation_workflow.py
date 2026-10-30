@@ -156,6 +156,15 @@ def model_config(config):
                 transport.get("billing_policy") == "subscription_only_no_paid_fallback", "Invalid plan-only route policy")
         require(transport.get("reasoning_effort") == "low" and transport.get("revision_policy") == "provider_alias_exploratory",
                 "Plan pilot must record supported effort and unpinned alias limitation")
+        require(transport.get('source_review_protocol') in (None,'clause-bound-v2'),'Unknown source review protocol')
+        if transport.get('source_review_protocol'):
+            require(transport.get('response_protocol')=='atomic-bound-v4','Clause review requires atomic generation')
+        if 'source_review_model' in transport:
+            value=transport['source_review_model']
+            require(isinstance(value,str) and bool(value.strip()) and value.strip().lower() not in ('auto','latest','default'),'Source reviewer must be explicitly frozen')
+        if 'source_review_timeout_seconds' in transport:
+            value=transport['source_review_timeout_seconds']
+            require(type(value) is int and 30<=value<=300,'Invalid source review time guard')
         for field in ("max_input_characters", "max_output_characters", "reported_output_token_guard"):
             require(type(transport.get(field)) is int and transport[field] > 0, "Invalid local stream guard")
         require(config["seed_policy"] == "unsupported", "Plan route does not expose a seed parameter")

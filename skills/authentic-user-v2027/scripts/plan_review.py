@@ -10,18 +10,37 @@ import validation_workflow as vw
 import trial_audit
 import atomic_protocol
 import atomic_review
+import clause_review
+
+def review_protocol(run):
+    transport=run['model_config']['transport']
+    name=transport.get('source_review_protocol')
+    vw.require(name in (None,clause_review.NAME),'Unsupported source review protocol')
+    if name:
+        vw.require(transport.get('response_protocol')=='atomic-bound-v4','Clause review requires atomic answers')
+    return name or transport.get('response_protocol')
+
+def review_model(run):
+    model=run['model_config']['transport'].get('source_review_model',run['model_config']['model'])
+    vw.require(isinstance(model,str) and bool(model.strip()) and model.strip().lower() not in ('auto','latest','default'),'Explicit source review model is required')
+    return model
+
+def review_timeout(run):
+    value=run['model_config']['transport'].get('source_review_timeout_seconds',90)
+    vw.require(type(value) is int and 30<=value<=300,'Invalid source review time guard')
+    return value
 
 def protocols(run):
     if run["model_config"]["transport"].get("response_protocol") == "atomic-bound-v4":
-        return atomic_protocol, atomic_review
+        return atomic_protocol, clause_review if review_protocol(run)==clause_review.NAME else atomic_review
     return ap, ar
 
 def batch_schema(protocol="field-bound-v3"):
-    item=(atomic_review if protocol == "atomic-bound-v4" else ar).schema();item['properties']['review_id']={'type':'string'};item['required'].append('review_id')
+    item=(clause_review if protocol==clause_review.NAME else atomic_review if protocol == "atomic-bound-v4" else ar).schema();item['properties']['review_id']={'type':'string'};item['required'].append('review_id')
     return {'type':'object','properties':{'reviews':{'type':'array','minItems':1,'maxItems':4,'items':item}},'required':['reviews'],'additionalProperties':False}
 
 def outbound_tasks(batch, protocol):
-    if protocol != 'atomic-bound-v4': return batch
+    if protocol not in ('atomic-bound-v4',clause_review.NAME): return batch
     return [{k:v for k,v in task.items() if k not in ('evidence','selected_fields','precheck','original_wire_sha256')} for task in batch]
 
 
@@ -121,7 +140,7 @@ def candidates(root,calls,prompts,run):
 
 def execute(run_dir,credential_dir,consent_file,phase_config=None):
     directory,run,calls,prompts=vw.load_run(run_dir);root=directory.parent
-    ap, ar = protocols(run); protocol = run['model_config']['transport'].get('response_protocol')
+    ap, ar = protocols(run); protocol = review_protocol(run)
     trial_audit.audit(directory)
     sources=phase_sources(run,phase_config)
     consent=au.read_object(consent_file)
@@ -136,14 +155,14 @@ def execute(run_dir,credential_dir,consent_file,phase_config=None):
         records,by_review,rejected=candidates(root,calls,prompts,run)
         for cid,row in rejected.items():vw.save(dest/(cid+'.rejected.json'),row)
         batches=[records[i:i+4] for i in range(0,len(records),4)]
-        plan={'run_sha256':run['run_sha256'],'total_candidates':len(calls),'structural_rejections':rejected,'phase_sources_sha256':sources,'phase_amendment':au.read_object(phase_config) if phase_config else None,'candidate_count':len(records),'batches':len(batches),'batch_size':4,'automatic_retries':0,'schema':batch_schema(protocol),'instructions':ar.INSTRUCTIONS,'model':run['model_config']['model'],'tasks':records,'judge_access':False}
+        plan={'run_sha256':run['run_sha256'],'total_candidates':len(calls),'structural_rejections':rejected,'phase_sources_sha256':sources,'phase_amendment':au.read_object(phase_config) if phase_config else None,'candidate_count':len(records),'batches':len(batches),'batch_size':4,'automatic_retries':0,'schema':batch_schema(protocol),'instructions':ar.INSTRUCTIONS,'model':review_model(run),'tasks':records,'judge_access':False}
         vw.save(dest/'plan.json',plan);vw.save(dest/'private-key.json',by_review)
-        client=cp.PlanClient(credential_dir);state={'status':'running','planned_batches':len(batches),'structural_rejections':len(rejected),'completed_batches':0,'reviewed_answers':0,'global_review_rejections':0,'input_tokens':0,'output_tokens':0,'paid_fallback_used':False};intervals=[];response_ids=set()
+        client=cp.PlanClient(credential_dir);state={'status':'running','planned_batches':len(batches),'structural_rejections':len(rejected),'completed_batches':0,'reviewed_answers':0,'global_review_rejections':0,'review_pending_atoms':0,'input_tokens':0,'output_tokens':0,'paid_fallback_used':False};intervals=[];response_ids=set()
         for i,batch in enumerate(batches,1):
             for name,expected in sources.items():
                 vw.require(hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()==expected,'Source changed during source-only audit')
             bid=f'B{i:03d}';prompt=json.dumps({'tasks':outbound_tasks(batch,protocol)},ensure_ascii=False);started=time.time();vw.save(dest/(bid+'.attempt.json'),{'status':'started','started_unix':started,'run_sha256':run['run_sha256']})
-            try:result=client.respond(plan['model'],prompt,ar.INSTRUCTIONS,schema=batch_schema(protocol),max_input_chars=40000,max_output_chars=20000)
+            try:result=client.respond(plan['model'],prompt,ar.INSTRUCTIONS,schema=batch_schema(protocol),max_input_chars=40000,max_output_chars=20000,timeout=review_timeout(run))
             except Exception as e:
                 state.update(status='stopped_transport',reason=str(e) if isinstance(e,au.InputError) else type(e).__name__);cp.atomic_private(dest/'status.json',state);print(json.dumps(state),flush=True);return state
             vw.save(dest/(bid+'.receipt.json'),result)
@@ -171,6 +190,7 @@ def execute(run_dir,credential_dir,consent_file,phase_config=None):
                     state['global_review_rejections']+=1
                     continue
                 if ap is atomic_protocol: derived.update(original_wire_sha256=task['original_wire_sha256'], precheck=task['precheck'])
+                if protocol==clause_review.NAME:state['review_pending_atoms']+=len(derived['review_contract_errors'])
                 cid=by_review[rid]['call_id']
                 vw.save(dest/(cid+'.assessment.json'),assessment)
                 vw.save(dest/(cid+'.final.json'),{'call_id':cid,'origin':'derived_source_review','review_origin':'separate_plan_model_context','candidate_sha256':task['wire_sha256'],'assessment_sha256':ar.digest(assessment),**derived})
@@ -179,15 +199,15 @@ def execute(run_dir,credential_dir,consent_file,phase_config=None):
             if usage['input_tokens']>16000 or usage['output_tokens']>6000:state.update(status='stopped_usage_guard');cp.atomic_private(dest/'status.json',state);return state
             cp.atomic_private(dest/'status.json',state)
             if i%4==0:print(json.dumps(state),flush=True)
-        state.update(status='completed_with_review_rejections' if state['global_review_rejections'] else 'completed',unique_response_ids=len(response_ids),overlapping_calls=sum(intervals[i][1]>intervals[i+1][0] for i in range(len(intervals)-1)))
+        state.update(status='completed_with_review_rejections' if state['global_review_rejections'] else 'completed_with_pending_reviews' if state['review_pending_atoms'] else 'completed',unique_response_ids=len(response_ids),overlapping_calls=sum(intervals[i][1]>intervals[i+1][0] for i in range(len(intervals)-1)))
         cp.atomic_private(dest/'status.json',state);print(json.dumps(state),flush=True);return state
     finally:lock.unlink(missing_ok=True)
 
 def audit(run_dir):
     directory,run,calls,prompts=vw.load_run(run_dir);root=directory.parent;dest=root/'source-review'
-    ap, ar = protocols(run); protocol = run['model_config']['transport'].get('response_protocol')
+    ap, ar = protocols(run); protocol = review_protocol(run)
     plan=au.read_object(dest/'plan.json');key=au.read_object(dest/'private-key.json')
-    vw.require(plan['run_sha256']==run['run_sha256'] and plan['schema']==batch_schema(protocol) and plan['instructions']==ar.INSTRUCTIONS,'Source review plan changed')
+    vw.require(plan['run_sha256']==run['run_sha256'] and plan['schema']==batch_schema(protocol) and plan['instructions']==ar.INSTRUCTIONS and plan['model']==review_model(run),'Source review plan changed')
     records,expected_key,rejected=candidates(root,calls,prompts,run)
     vw.require(plan['tasks']==records and key==expected_key and plan.get('structural_rejections')==rejected and plan.get('total_candidates')==len(calls),'Review coverage or structural failure set changed')
     all_candidates={v['call_id'] for v in key.values()}
@@ -231,8 +251,10 @@ def audit(run_dir):
             vw.require(derived['call_id']==cid and derived['candidate_sha256']==ar.digest(candidate) and derived['assessment_sha256']==ar.digest(assessment) and all(derived.get(k)==v for k,v in expected.items()),'Derived output not reproducible from review')
             reviewed+=1
     vw.require(all(intervals[i][1]<=intervals[i+1][0] for i in range(len(intervals)-1)),'Overlapping source review calls')
-    state=au.read_object(dest/'status.json');vw.require(state['status'] in ('completed','completed_with_review_rejections') and state['reviewed_answers']==reviewed==len(records) and state['structural_rejections']==len(rejected) and state.get('global_review_rejections',0)==global_rejections and state['completed_batches']==len(ids) and state['input_tokens']==total_in and state['output_tokens']==total_out,'Source review counters mismatch')
-    return {'local_integrity_passed':True,'provider_verified_independently':False,'total_candidates':len(calls),'structural_rejections':len(rejected),'reviewed_answers':reviewed,'global_review_rejections':global_rejections,'all_assessments_usable':global_rejections==0,'valid_assessments':reviewed-global_rejections,'review_contract_error_atoms':sum(len(au.read_object(p).get('review_contract_errors',[])) for p in dest.glob('*.final.json')),'completed_batches':len(ids),'unique_response_ids':len(ids),'overlapping_calls':0,'input_tokens':total_in,'output_tokens':total_out,'paid_fallback_used':False,'receipt_index_sha256':vw.digest(hashes),'origin':'separate_plan_model_context; not independent human'}
+    state=au.read_object(dest/'status.json');vw.require(state['status'] in ('completed','completed_with_review_rejections','completed_with_pending_reviews') and state['reviewed_answers']==reviewed==len(records) and state['structural_rejections']==len(rejected) and state.get('global_review_rejections',0)==global_rejections and state['completed_batches']==len(ids) and state['input_tokens']==total_in and state['output_tokens']==total_out,'Source review counters mismatch')
+    pending=sum(len(au.read_object(p).get('review_contract_errors',[])) for p in dest.glob('*.final.json'))
+    if protocol==clause_review.NAME:vw.require(state['review_pending_atoms']==pending,'Pending atom count differs')
+    return {'local_integrity_passed':True,'provider_verified_independently':False,'total_candidates':len(calls),'structural_rejections':len(rejected),'reviewed_answers':reviewed,'global_review_rejections':global_rejections,'all_assessments_usable':global_rejections==0 and pending==0,'all_atom_reviews_valid':pending==0,'valid_assessments':reviewed-global_rejections,'review_contract_error_atoms':pending,'review_pending_atom_count':pending if protocol==clause_review.NAME else 0,'review_protocol':protocol,'review_model':plan['model'],'completed_batches':len(ids),'unique_response_ids':len(ids),'overlapping_calls':0,'input_tokens':total_in,'output_tokens':total_out,'paid_fallback_used':False,'receipt_index_sha256':vw.digest(hashes),'origin':'separate_plan_model_context; not independent human'}
 
 def main():
     import sys
