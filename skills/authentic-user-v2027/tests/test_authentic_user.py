@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'scripts'))
 spec = importlib.util.spec_from_file_location("authentic_user", ROOT / "scripts/authentic_user.py")
 au = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(au)
@@ -194,6 +195,21 @@ class EvidenceTests(unittest.TestCase):
         bundle['bundle_sha256'] = au.bundle_digest(bundle)
         self.assertIsNone(bundle['derived_summary']['latest_score'])
         self.assertEqual(au.validate_bundle(bundle), bundle)
+
+    def test_alpha13_bundle_keeps_decision_prompt_after_version_bump(self):
+        bundle=self.bundle();bundle['skill_version']='2027.0.0-alpha.13'
+        bundle['bundle_sha256']=au.bundle_digest(bundle)
+        self.assertEqual(au.validate_bundle(bundle),bundle)
+        prompt=au.render_prompt(bundle)
+        self.assertIn('decision-bound-v5',prompt)
+        self.assertIn('独立脚本基线',prompt)
+
+    def test_alpha12_bundle_keeps_atomic_prompt_after_version_bump(self):
+        bundle=self.bundle();bundle['skill_version']='2027.0.0-alpha.12'
+        bundle['bundle_sha256']=au.bundle_digest(bundle)
+        self.assertEqual(au.validate_bundle(bundle),bundle)
+        self.assertIn('atomic-bound-v4',au.render_prompt(bundle))
+        self.assertNotIn('独立脚本基线',au.render_prompt(bundle))
 
     def test_alpha11_source_map_cannot_be_removed_with_a_new_checksum(self):
         bundle = self.bundle()

@@ -14,9 +14,10 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.13"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION}
-CONTEXT_BUNDLE_VERSIONS = {"2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION}
+VERSION = "2027.0.0-alpha.14"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", "2027.0.0-alpha.13", VERSION}
+DECISION_BUNDLE_VERSIONS = {"2027.0.0-alpha.13", VERSION}
+CONTEXT_BUNDLE_VERSIONS = {"2027.0.0-alpha.11", "2027.0.0-alpha.12", "2027.0.0-alpha.13", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -350,7 +351,7 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION), resolve_score_ties=bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS)
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", "2027.0.0-alpha.13", VERSION), resolve_score_ties=bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS)
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
     if bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS:
@@ -407,7 +408,7 @@ def render_prompt(bundle):
     import decision_protocol as decision
     import attitude_baseline as baseline
     import source_registry as sr
-    typed = decision if bundle["skill_version"] == VERSION else atomic
+    typed = decision if bundle["skill_version"] in DECISION_BUNDLE_VERSIONS else atomic
     return ("全真用户 v2027 研究预览版。只依据下面证据包及能力档位回答；facts_only不能推断，insufficient明确未知。\n"
             + typed.INSTRUCTIONS + (sr.MAP_INSTRUCTIONS if 'source_map' in bundle else '') + "\n输出一个绑定包：bundle_sha256、answer_mode、wire_answer。"
             "answer_mode依能力为simulation/facts_summary/insufficient_evidence。wire_answer结构：\n"

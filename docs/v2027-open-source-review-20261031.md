@@ -50,7 +50,7 @@ v2027 已有 `select_records()`，按词项重合、日期等确定性规则选�
 
 ## 建议的下一轮顺序与验收
 
-下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。alpha.11进一步实现问题锚点与最近背景检索、并列评分消歧及单记忆臂网格，见[实现与准备状态](../skills/authentic-user-v2027/references/context-20261031.md)。alpha.12已补齐alpha.11冻结算法的[新8人完整结果](../skills/authentic-user-v2027/references/pilot-20261031-context.md)：64次生成、16批审核完成，但态度命中仍低于简单NPS延续。alpha.13进一步实现[态度估计、条件反应和基线分离](../skills/authentic-user-v2027/references/decision-20261031.md)及脚本提取引文，199项工程检查通过，尚无新协议真实模型效果结果。独立人工评分与预测优势未成立；原alpha.9缺失不回填，不能将工程实现视为整张清单已验证有效。
+下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。alpha.11进一步实现问题锚点与最近背景检索、并列评分消歧及单记忆臂网格，见[实现与准备状态](../skills/authentic-user-v2027/references/context-20261031.md)。alpha.12已补齐alpha.11冻结算法的[新8人完整结果](../skills/authentic-user-v2027/references/pilot-20261031-context.md)：64次生成、16批审核完成，但态度命中仍低于简单NPS延续。alpha.13进一步实现[态度估计、条件反应和基线分离](../skills/authentic-user-v2027/references/decision-20261031.md)及脚本提取引文，199项工程检查通过；之后alpha.13冻结的新8人完成64生成/16批审核，Q2仍低于简单基线，alpha.14据此做工程修复而未重跑模型，见[本轮结果](../skills/authentic-user-v2027/references/pilot-20261031-decision.md)。独立人工评分与预测优势未成立；原alpha.9缺失不回填，不能将工程实现视为整张清单已验证有效。
 
 | 优先级 | 实际改动 | 验收与限制 | 模型/费用影响 |
 |---|---|---|---|
@@ -75,3 +75,10 @@ v2027 已有 `select_records()`，按词项重合、日期等确定性规则选�
 | tsinghua-fib-lab/AgentSociety | [3d359288d3c5](https://github.com/tsinghua-fib-lab/AgentSociety/tree/3d359288d3c513f6c9f77afbaa9c16e205693f83) | 2026-10-30 |
 
 本轮只借鉴方法和架构，不移植代码。若后续采用第三方实现，应固定来源提交并保留相应许可与署名；论文、数据和访问服务分别按其条件处理。这份调研不改写已发布 alpha.9 的源码、安装包或实验结果。
+
+
+## 同日补充：Concordia与已完成新协议试验
+
+另阅读[Concordia官方组件与引擎说明](https://github.com/google-deepmind/concordia/blob/main/CHEATSHEET.md)：其问卷引擎区分写回记忆的顺序问答和批次中不改记忆的无状态问答。这提示我们应继续把独立重复请求与多轮访谈分开；前次代理回答不能自动变成下一次的真人资料。组件组织可供参考，本轮没有安装该框架、复制代码或增加模型调用。
+
+本项目的新协议试验已经完整结束；发现机械关键词拦截、错栏类别估计、未知代码冲突及来源覆盖索引缺失。alpha.14已作局部修复和213项工程检查；来源支持、交付覆盖和留出命中继续分别报告，未复用变更前审核或宣称新预测增益。下一步需要独立来源校准及可见历史有变化的挑战样本，稀疏短评没有区分力时应补真实材料，而不是扩大模拟人格。原有固定论文版本及其相对复测分数保留，不以旧摘要中的85%替代版本差异。

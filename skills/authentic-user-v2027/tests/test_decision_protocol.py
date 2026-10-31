@@ -134,6 +134,101 @@ class DecisionTests(unittest.TestCase):
         self.w['protocol_version']=4
         with self.assertRaises(p.ProtocolError):p.precheck(self.e,self.w)
 
+    def test_contextual_priority_denial_is_reviewed_not_lexically_deleted(self):
+        self.w['hypotheses']=[{'text':'退款办理可能是主要待检验关注点，不代表最看重。',
+                              'source_refs':[ref(self.e,'E002','text')],'confidence':'low'}]
+        checked,log=p.precheck(self.e,self.w,'individual_memory','rental')
+        self.assertTrue(log['original_strict_contract_pass'])
+        self.assertEqual(checked['hypotheses'],self.w['hypotheses'])
+        task=review.task(self.e,checked,'individual_memory','rental')
+        hints=task['atom_bindings'][0]['lexical_review_hints']
+        self.assertTrue(hints['statistic_or_comparison_terms']);self.assertIsNone(hints['semantic_verdict'])
+        # Permitting review never certifies a comparison as semantically true.
+        a=assessment(self.e,checked);atoms=p.units(self.e,checked)
+        reject_first_clause(a['items'][0],atoms[0])
+        out=review.apply(self.e,checked,a,level='individual_memory',industry='rental')
+        self.assertEqual(out['hypotheses'],[]);self.assertIsNotNone(out['prediction'])
+
+    def test_legacy_frequency_contract_is_unchanged(self):
+        atom={'kind':'topic_hypothesis','text':'主要关注退款。','confidence':'low',
+              'anchors':[{'ref':ref(self.e,'E002','text'),'quote':self.e[1]['text']}]}
+        with self.assertRaises(p.ProtocolError):sr.check_atom(atom,sr.lookup(self.e))
+
+    def test_dates_may_accompany_a_substantive_source_but_cannot_replace_it(self):
+        self.w['prediction']['source_refs'].append(ref(self.e,'E003','date'))
+        p.validate(self.e,self.w,'individual_memory','rental')
+        self.w['reactions'][0]['source_refs']=[ref(self.e,'E003','date')]
+        out,log=p.precheck(self.e,self.w,'individual_memory','rental')
+        self.assertEqual(out['reactions'],[]);self.assertIsNotNone(out['prediction'])
+        self.assertIn('Dates and counts alone',log['component_errors'][0]['error'])
+
+    def test_point_estimate_in_hypothesis_cannot_bypass_limited_capability(self):
+        self.w['prediction']=None
+        self.w['hypotheses']=[{'text':'下一条NPS可能为不推荐。','source_refs':[ref(self.e,'E003','score')],'confidence':'low'}]
+        original=copy.deepcopy(self.w)
+        out,log=p.precheck(self.e,self.w,'limited_attitude','rental')
+        self.assertEqual(out['hypotheses'],[]);self.assertIsNone(out['prediction'])
+        self.assertEqual(out['reactions'],self.w['reactions']);self.assertEqual(self.w,original)
+        self.assertIn('only in prediction',log['component_errors'][0]['error'])
+
+    def test_future_topic_without_a_category_estimate_remains_a_hypothesis(self):
+        self.w['hypotheses']=[{'text':'退款办理可能影响下一次评价。','source_refs':[ref(self.e,'E002','text')],'confidence':'low'}]
+        p.validate(self.e,self.w,'individual_memory','rental')
+
+    def test_recommendation_reward_topic_is_not_an_nps_category_estimate(self):
+        self.w['hypotheses']=[{'text':'下一次可能关注的主题是推荐奖励规则。',
+                              'source_refs':[ref(self.e,'E003','tags')],'confidence':'low'}]
+        p.validate(self.e,self.w,'individual_memory','rental')
+
+    def test_category_continuation_needs_its_own_score_not_another_component(self):
+        self.w['reactions'][0]['text']='如果本次办理符合约定，可能继续给出不推荐类别。'
+        out,log=p.precheck(self.e,self.w,'individual_memory','rental')
+        self.assertEqual(out['reactions'],[]);self.assertIsNotNone(out['prediction'])
+        self.assertIn('own selected historical score',log['component_errors'][0]['error'])
+        self.w['reactions'][0]['source_refs'].append(ref(self.e,'E003','score'))
+        p.validate(self.e,self.w,'individual_memory','rental')
+
+    def test_continued_experience_is_not_automatically_a_continued_nps_category(self):
+        self.w['reactions'][0]['text']='如果办理仍未符合约定，可能给出不推荐类别。'
+        p.validate(self.e,self.w,'individual_memory','rental')
+
+    def test_review_gets_complete_structural_index_but_no_unselected_values(self):
+        self.e.append({'id':'E005','kind':'verbatim','industry':'rental','date':'2025-04-01','score':7,
+                       'text':'SYNTHETIC_UNSELECTED_VALUE_SHOULD_STAY_LOCAL'})
+        task=review.outbound_task(self.e,self.w,'individual_memory','rental')
+        self.assertNotIn('SYNTHETIC_UNSELECTED_VALUE_SHOULD_STAY_LOCAL',json.dumps(task))
+        self.assertNotIn('evidence',task)
+        index=task['visible_field_index'];newest=[dict(zip(index['columns'],x)) for x in index['records'] if x[0]=='E005']
+        self.assertTrue(newest);self.assertNotIn('value',json.dumps(index))
+        self.assertEqual(newest[0]['recorded_date'],'2025-04-01')
+        self.assertEqual(newest[0]['record_kind'],'verbatim')
+        self.assertEqual(task['nps_category_rule']['promoter'],[9,10])
+        self.assertIn(0,task['nps_category_rule']['detractor'])
+
+    def test_conflicting_unknown_is_logged_without_rewriting_the_estimate(self):
+        self.w['unknowns']=['no_supported_estimate','unobserved_factors'];original=copy.deepcopy(self.w)
+        with self.assertRaisesRegex(p.ProtocolError,'contradicts'):p.validate(self.e,self.w,'individual_memory','rental')
+        out,log=p.precheck(self.e,self.w,'individual_memory','rental')
+        self.assertFalse(log['original_strict_contract_pass']);self.assertEqual(len(log['unknown_errors']),1)
+        self.assertEqual(out['prediction'],self.w['prediction']);self.assertEqual(out['unknowns'],['unobserved_factors'])
+        self.assertEqual(self.w,original)
+
+    def test_unknown_still_applies_when_the_contradicting_estimate_is_withdrawn(self):
+        self.w['unknowns']=['no_supported_estimate'];self.w['prediction']['source_refs']=['F999']
+        out,log=p.precheck(self.e,self.w,'individual_memory','rental')
+        self.assertIsNone(out['prediction']);self.assertEqual(out['unknowns'],['no_supported_estimate'])
+        self.assertEqual(len(log['unknown_errors']),1)
+
+    def test_uncalibrated_future_qualification_can_keep_its_independent_estimate(self):
+        self.w['prediction']['reason']='所选调查评分为0，估计不保证未来结果。'
+        a=assessment(self.e,self.w)
+        out=review.apply(self.e,self.w,a,level='individual_memory',industry='rental')
+        self.assertEqual(out['prediction'],self.w['prediction'])
+        # A genuine evidence-absence clause remains a separate policy withdrawal.
+        a['items'][1]['clauses'][-1].update(role='evidence_boundary',inference='faithful_summary')
+        policy=[];out=review.apply(self.e,self.w,a,policy_withdrawals=policy,level='individual_memory',industry='rental')
+        self.assertIsNone(out['prediction']);self.assertEqual(len(policy),1)
+
     def test_summary_cannot_silently_turn_a_tag_into_self_report(self):
         self.w['summaries']=[{'text':'合成标签摘要','source_refs':[ref(self.e,'E003','tags')],'confidence':'low'}]
         out,log=p.precheck(self.e,self.w,'individual_memory','rental')

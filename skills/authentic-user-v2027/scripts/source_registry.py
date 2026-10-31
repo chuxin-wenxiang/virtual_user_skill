@@ -85,7 +85,13 @@ def value_text(item):
     value = item['value']
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
-def check_atom(atom, book):
+def check_atom(atom, book, *, review_context=False):
+    """Validate anchors; contextual v5 prose still requires semantic source review.
+
+    The default preserves the legacy v4 contract. Contextual review permits
+    metadata alongside substantive fields and leaves lexical comparisons to
+    the reviewer, since the same words also occur in denials and hypotheses.
+    """
     anchors = atom['anchors']; selected = []
     p.require(isinstance(anchors, list) and 1 <= len(anchors) <= 6, 'Atom needs one to six exact field anchors')
     seen = set()
@@ -95,11 +101,15 @@ def check_atom(atom, book):
         p.require(isinstance(ref, str) and ref in book and ref.startswith('F'), 'Unknown field anchor')
         p.require(isinstance(quote, str) and quote.strip() and quote in value_text(book[ref]), 'Anchor quote is not an exact source substring')
         p.require((ref, quote) not in seen, 'Duplicate exact anchor')
-        p.require(book[ref]['field'] not in ('date', 'count'), 'Dates and counts alone are not a qualitative premise')
+        if not review_context:
+            p.require(book[ref]['field'] not in ('date', 'count'), 'Dates and counts alone are not a qualitative premise')
         seen.add((ref, quote))
         if book[ref] not in selected: selected.append(book[ref])
     text = atom['text']
-    p.require(not RANKING.search(text), 'Frequency/comparison prose must use script-rendered statistics facts')
+    if review_context:
+        p.require(any(x['field'] not in ('date','count') for x in selected), 'Dates and counts alone are not a qualitative premise')
+    else:
+        p.require(not RANKING.search(text), 'Frequency/comparison prose must use script-rendered statistics facts')
     if atom['kind'] == 'source_summary':
         p.require(any(x['field'] in ('text', 'score') for x in selected), 'Self-report summaries require text or score fields')
     return selected
