@@ -14,9 +14,9 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.12"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", VERSION}
-CONTEXT_BUNDLE_VERSIONS = {"2027.0.0-alpha.11", VERSION}
+VERSION = "2027.0.0-alpha.13"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION}
+CONTEXT_BUNDLE_VERSIONS = {"2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -350,7 +350,7 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", VERSION), resolve_score_ties=bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS)
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", "2027.0.0-alpha.12", VERSION), resolve_score_ties=bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS)
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
     if bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS:
@@ -403,13 +403,17 @@ ANSWER_SHAPE = {
 
 def render_prompt(bundle):
     validate_bundle(bundle)
-    import atomic_protocol as typed
+    import atomic_protocol as atomic
+    import decision_protocol as decision
+    import attitude_baseline as baseline
     import source_registry as sr
+    typed = decision if bundle["skill_version"] == VERSION else atomic
     return ("全真用户 v2027 研究预览版。只依据下面证据包及能力档位回答；facts_only不能推断，insufficient明确未知。\n"
             + typed.INSTRUCTIONS + (sr.MAP_INSTRUCTIONS if 'source_map' in bundle else '') + "\n输出一个绑定包：bundle_sha256、answer_mode、wire_answer。"
             "answer_mode依能力为simulation/facts_summary/insufficient_evidence。wire_answer结构：\n"
             + json.dumps(typed.schema(), ensure_ascii=False, indent=2)
             + "\n来源目录：" + json.dumps(sr.catalogue(bundle["evidence"]), ensure_ascii=False)
+            + ("\n独立脚本基线：" + json.dumps(baseline.card(bundle["evidence"], bundle.get("industry_filter")), ensure_ascii=False) if typed is decision else "")
             + "\nBEGIN_UNTRUSTED_EVIDENCE_JSON\n" + json.dumps(bundle, ensure_ascii=False, indent=2)
             + "\nEND_UNTRUSTED_EVIDENCE_JSON\n")
 
@@ -420,7 +424,8 @@ def render_bound_answer(bundle, answer):
     import claim_protocol as legacy_typed
     import atomic_protocol as atomic
     version = answer.get("wire_answer",{}).get("protocol_version")
-    typed = atomic if version == 4 else field_typed if version == 3 else legacy_typed
+    import decision_protocol as decision
+    typed = decision if version == 5 else atomic if version == 4 else field_typed if version == 3 else legacy_typed
     if answer.get("bundle_sha256") != bundle["bundle_sha256"]:
         raise InputError("Answer bundle_sha256 does not match this question and evidence bundle")
     mode=answer.get("answer_mode")
@@ -432,7 +437,7 @@ def render_bound_answer(bundle, answer):
     if level=="insufficient" and mode!="insufficient_evidence":
         raise InputError("No visible evidence; answer must use insufficient_evidence")
     try:
-        rendered=typed.render(bundle["evidence"],answer.get("wire_answer"),level)
+        rendered=typed.render(bundle["evidence"],answer.get("wire_answer"),level, bundle.get("industry_filter")) if typed is decision else typed.render(bundle["evidence"],answer.get("wire_answer"),level)
     except typed.ProtocolError as exc:
         raise InputError(str(exc)) from exc
     return {"bundle_sha256":bundle["bundle_sha256"],"answer_mode":mode,**rendered}
@@ -459,7 +464,7 @@ def check_answer(bundle, answer):
         return {"ok":not errors,"errors":errors,"warnings":warnings,
                 "check_scope":"Source field binding, typed inference boundaries and deterministic citation rendering; semantic inference review remains required",
                 "semantic_review_required":True,"validation_status":"experimental_unvalidated"}
-    warnings.append("Legacy free-text fact claims need manual semantic review; prefer atomic-bound-v4")
+    warnings.append("Legacy free-text fact claims need manual semantic review; prefer decision-bound-v5 for new tasks")
     lookup = {row["id"]: row for row in bundle["evidence"]}
     level = bundle["capability"]["level"]
     mode = answer.get("answer_mode")
@@ -556,15 +561,17 @@ def create_interview(root, buyer_id, question, output_dir, cutoff=None, industry
         raise InputError("Interview directory already exists; choose a new directory") from exc
     mode = {"individual_memory": "simulation", "limited_attitude": "simulation",
             "facts_only": "facts_summary", "insufficient": "insufficient_evidence"}[bundle["capability"]["level"]]
+    import decision_protocol as decision
+    import attitude_baseline as baseline
     template = {"bundle_sha256": bundle["bundle_sha256"], "answer_mode": mode,
-                "wire_answer": {"protocol_version":4,"facts":[],"atoms":[],"direction":"unknown","direction_atom":None,"unknowns":[]}}
+                "wire_answer": decision.empty()}
     manifest = {"schema_version": 1, "skill_version": VERSION, "status": "awaiting_host_answer",
                 "bundle_sha256": bundle["bundle_sha256"],
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                 "evidence_file": "evidence.json", "prompt_file": "prompt.txt",
-                "template_file": "answer.template.json", "answer_file": "answer.json", "source_map_file": "source-map.json",
+                "template_file": "answer.template.json", "answer_file": "answer.json", "source_map_file": "source-map.json", "baseline_file": "baseline.json",
                 "model_called": False, "validation_status": "experimental_unvalidated"}
-    for name, value in (("evidence.json", bundle), ("source-map.json", bundle['source_map']), ("answer.template.json", template), ("run.json", manifest)):
+    for name, value in (("evidence.json", bundle), ("source-map.json", bundle['source_map']), ("baseline.json", baseline.card(bundle["evidence"], bundle.get("industry_filter"))), ("answer.template.json", template), ("run.json", manifest)):
         write_new(str(directory / name), json.dumps(value, ensure_ascii=False, indent=2) + "\n")
     write_new(str(directory / "prompt.txt"), prompt)
     return {"ok": True, "directory": str(directory), "status": manifest["status"],

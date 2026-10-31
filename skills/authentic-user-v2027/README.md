@@ -1,17 +1,14 @@
 # 全真用户 v2027 预览版
 
-版本：`2027.0.0-alpha.12` · 验证状态：**研究预览；新8人完整验证结束，预测仍低于简单基线**
+版本：`2027.0.0-alpha.13` · 验证状态：**研究预览；新预测协议已工程验证，效果待独立新用户验证**
 
-把本地个体历史整理为有时间边界的证据包，由宿主模型生成附引用的AI模拟。新增逐条判断、脚本来源目录与完整统计、概括/假设分开审核及最小撤回。常规使用无需单独API Key；套餐宿主消耗其套餐额度，审核增加用量。真实档案不随代码发布。
+把授权本地历史整理为有时间边界的证据包，由宿主模型生成附来源的AI模拟。普通使用不要求单独API Key，消耗宿主额度；真实档案不随代码发布。
 
-本版补齐alpha.11冻结算法的新8人完整结果：64次生成、16批来源审核、80个唯一响应、64份派生回答，无重试或付费回退。原始严格57/64通过；最终165条判断在当前assistant评分下未发现支持不足，另有0–1条疑似误撤的语义争议。态度原始7/16、审核后6/16，低于最近同业NPS延续16/16，不能称更准确。179项离线检查通过；新增的是报告、版本及向后兼容检查，生成、检索与审核算法未改。见[完整分母、评分分歧和结果](references/pilot-20261031-context.md)。
+本版将AI态度估计、条件反应与脚本历史延续基线分开。估计有自己的来源和审核结果，一个错误反应不再连带删除独立有据的估计；估计失败仍未知，基线不替AI补分。模型只选择来源F编号，脚本提取完整原文并按栏目确定类型，减少引文复写与kind/condition错配。原因聚焦少量有依据的重点，不用长列表碰中目标。
 
-此前新增的问题锚点与最近背景检索、并列评分消歧、能力档位以及64次单记忆臂网格继续可用，见[设计与执行前记录](references/context-20261031.md)；[alpha.10](references/offline-20261031-evidence-map.md)的字段关联和只读报告也继续保留。
-此前alpha.9使用scope-bound-v3，区分历史断言、未来条件和证据边界；新8人128次生成完成（原始严格108通过、20失败），来源第3批连接错误后按约停止，仅完成8/128份，未重试。全部原始判断仍有18条部分支持、3条不支持；记忆态度6/16低于最近NPS延续14/16。完整验证未完成，保留研究预览，详见[完整结果与限制](references/pilot-20261030-scope.md)。
+199项离线检查通过，含完整模拟生成—审核—回执审计；新v5协议尚无真实模型效果结论。旧8人64份回答兼容回放仍57/64严格通过，Q2原始7/16、审核后6/16，435份旧文件未改。详见[新协议、离线证据和验证计划](references/decision-20261031.md)。
 
-[本轮逐条归因检查](references/pilot-20261029-atomic.md)：新8人128次生成，原始严格27通过、101失败；32次来源审核尝试取得31批完整响应、123份有效派生回答，仍有8条部分支持判断。记忆态度题5/16命中，简单最近同业NPS延续8/8人。修正词表误拦截和多引文规则后，本地结构回放78/128通过；这不是新的模型效果验证。113项离线工程检查通过，继续保留研究预览。
-
-[alpha.6新8人](references/pilot-20261029-fresh.md)、[alpha.5同人回归](references/pilot-20261029.md)与[alpha.4执行偏离](references/pilot-20261026.md)独立保留。工程检查通过不证明更接近真人、个人因果或真实PMF。
+上一完整新8人试验使用alpha.11冻结算法，64次生成、16批来源审核、80唯一响应、64最终派生结果；最终165条判断在当前assistant评分下未发现支持不足，仍有0–1条疑似误撤争议。Q2最终6/16低于最近同业NPS延续16/16，不能称预测更准确，也不是alpha.13新算法实测。见[完整结果及限制](references/pilot-20261031-context.md)。alpha.9的缺失保持未完成，不回填。
 
 ## 安装
 
@@ -34,8 +31,8 @@ python3 scripts/authentic_user.py doctor --profiles-dir examples/profiles
 python3 scripts/authentic_user.py inspect --profiles-dir examples/profiles --buyer-id demo-rich --cutoff 2026-01-01
 python3 scripts/authentic_user.py prepare --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --industry domestic_hotel --output outputs/demo-memory.json
 python3 scripts/authentic_user.py prompt --bundle outputs/demo-memory.json --output outputs/demo-prompt.txt
-python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-atomic-demo.json
-python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.json --answer examples/answer-atomic-demo.json --output outputs/demo-answer.rendered.json
+python3 scripts/authentic_user.py check-answer --bundle outputs/demo-memory.json --answer examples/answer-decision-demo.json
+python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.json --answer examples/answer-decision-demo.json --output outputs/demo-answer.rendered.json
 ```
 
 将 `outputs/demo-prompt.txt` 交给当前宿主 AI，按其中协议生成回答，再用 `render-answer` 读取来源字段统一生成引用，并用 `check-answer` 检查绑定结果。脚本的 `prompt` 命令只生成文本，不会替你调用模型。
@@ -48,7 +45,7 @@ python3 scripts/authentic_user.py render-answer --bundle outputs/demo-memory.jso
 python3 scripts/authentic_user.py interview --profiles-dir examples/profiles --buyer-id demo-rich --question '酒店退改和价格透明，你更在意什么？' --cutoff 2026-01-01 --output-dir outputs/interview-demo
 ```
 
-命令创建证据包、同记录字段关联表source-map.json、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，先按条目预检候选并保存原始失败记录：
+命令创建证据包、同记录字段关联表source-map.json、独立baseline.json、提示词、绑定证据包的回答模板和运行记录，不自动调用模型或生成假回答。宿主 AI 读取 `outputs/interview-demo/prompt.txt` 后生成 `answer.json`，先按条目预检候选并保存原始失败记录：
 
 ```bash
 python3 scripts/plan_review.py precheck --bundle outputs/interview-demo/evidence.json --answer outputs/interview-demo/answer.json --output outputs/interview-demo/answer.checked.json --audit-output outputs/interview-demo/precheck.json
@@ -57,7 +54,7 @@ python3 scripts/authentic_user.py check-answer --bundle outputs/interview-demo/e
 
 随后按 [SKILL交付流程](SKILL.md) 用宿主完成来源审核并确定性撤下歧义项；审核也消耗模型额度，不要求另外购买API。
 
-新回答必须携带当前证据包的 `bundle_sha256`，wire_answer 的事实只能选来源目录编号，判断分成带原文锚点的atoms，概括与假设分别审核；渲染器统一生成正文与 claims，避免两份清单失配。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
+新回答必须携带当前证据包的 `bundle_sha256`，wire_answer 的事实和判断选择来源目录编号，完整原文由脚本提取，态度估计、条件反应和假设分别审核；渲染器统一生成正文与 claims，避免两份清单失配。仍兼容读取 alpha.1 证据包；旧回答未绑定时会返回明确警告，建议重新生成。
 
 ## 接入自己的本地档案
 
@@ -81,12 +78,12 @@ python3 scripts/authentic_user.py prepare --buyer-id USER_ID --question '你最�
 
 ```bash
 python3 scripts/validation_prep.py scan --profiles-dir /absolute/path/my-profiles
-python3 scripts/validation_prep.py build --profiles-dir /absolute/path/my-profiles --input-dir /private/tmp/pilot-inputs --judge-dir /private/tmp/pilot-judge
+python3 scripts/validation_prep.py build --profiles-dir /absolute/path/my-profiles --input-dir /private/tmp/pilot-inputs --judge-dir /private/tmp/pilot-judge --comparison memory_vs_computed_baselines --response-protocol decision-bound-v5 --include-zero --max-records 24
 ```
 
-默认按四组各 2 人选取互斥的 8 人，生成四类题、两种条件的 64 份提示词和计划重复 2 次的 128 条调用清单。实际是否能满足配额取决于本地数据；不够时会报错，不补造样本。材料保持本地，输入目录和评分隐藏材料目录相互分离。
+以上命令准备M记忆臂：默认四组各2人、四题、每题重复2次，8人32份提示词、64次生成和最多16批审核；Q2最近NPS及固定类别基线本地计算。新用户验证还须显式排除所有旧人、启用fresh_holdout并事前固定抽样规则，不能把默认分组材料称为独立新样本。具体见[新协议与验证计划](references/decision-20261031.md)。
 
-本工具比较“同一批历史标签”与“同一可见历史的个体记忆”，不冒称复现旧生产 Agent。模型版本与参数仍需在生成前冻结，未知题需先核实可见证据；`model_calls_completed=0` 表示只准备了材料。详见 [验证流程与口径](references/validation.md)。
+原标签—记忆双臂继续保留兼容入口，使用显式旧协议；不能将新M臂伪称标签对照或修改旧运行分母。准备不调用模型，实际取数/输入可用不代表模型效果已验证。输入与隐藏材料相互分离并保留在本地。
 
 ## 冻结、回答导入与盲评
 
@@ -113,7 +110,7 @@ Skill本身不收费。默认由当前宿主模型生成及审核：套餐宿主
 
 ## 引用可靠性与事实/推断边界
 
-本版借鉴2026方法中的证据分层、候选机制/竞争解释和用户配对统计，但不复制内部服务或私有口径。原话仍是历史自述，来源字段忠实提取不证明真实行为；候选机制不是诊断，推断即使格式正确仍需语义复核。没有机制时可明确未知。旧自由文本回答兼容读取并提示复核，新任务使用 atomic-bound-v4，按来源目录和逐条判断归因，交付前做来源语义审核。
+本版借鉴2026方法中的证据分层、候选机制/竞争解释和用户配对统计，但不复制内部服务或私有口径。原话仍是历史自述，来源字段忠实提取不证明真实行为；候选机制不是诊断，推断即使格式正确仍需语义复核。没有机制时可明确未知。旧自由文本及v2/v3/v4回答兼容读取，新宿主任务使用decision-bound-v5，按各组件的实际来源分别审核；旧冻结运行不改协议。
 
 ## 检查
 

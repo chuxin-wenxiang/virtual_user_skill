@@ -4,6 +4,8 @@
 
 本适配器仅使用用户为本应用单独授权的 OAuth 套餐范围，连接官方 `/v1/responses`。不读取 `OPENAI_API_KEY`，不读取 Codex 登录凭证，不充值，不切换按量 API 计费。账号不支持、额度不足、服务错误或结果不完整时停止新请求，没有自动重试。重新授权也不能绕过额度限制。
 
+当前alpha.13可选批试使用decision-bound-v5与decision-scope-v1，明确冻结19源，见[当前配置与边界](decision-20261031.md)。下方各alpha节保留旧运行协议，不把v4示例schema用于v5；服务可用性和剩余额度仍须在执行前实际核验。
+
 ## 授权与无真实资料探针
 
 Python 3.10+；首次 OAuth 校验和刷新使用可选依赖 `PyJWT[crypto]`，离线核心无需安装。按本机依赖管理方式安装该库后执行：
@@ -103,7 +105,7 @@ python3 -c 'import sys; sys.path.insert(0,"scripts"); import plan_review; print(
 
 ## alpha.7：逐条判断与审核合约
 
-当前批试显式冻结 `response_protocol=atomic-bound-v4`，schema哈希取 `atomic_protocol.schema()`，共享指令取其 `INSTRUCTIONS`。执行源还包括 `source_registry.py`、`atomic_protocol.py`、`atomic_review.py`；旧v2/v3继续按各自schema复现。
+alpha.7批试当时显式冻结 `response_protocol=atomic-bound-v4`，schema哈希取 `atomic_protocol.schema()`，共享指令取其 `INSTRUCTIONS`。执行源还包括 `source_registry.py`、`atomic_protocol.py`、`atomic_review.py`；旧v2/v3继续按各自schema复现。
 
 `plan_review.py`按冻结协议选择审核器。v4传输来源目录一次，避免把完整原话在证据、目录和所选字段中重复发送；本地审计仍从原始输入重建。概括接受supported，有边界假设接受bounded_hypothesis。单条审核的引用/问题片段合约不合格时仅隔离该条，`.final.json`记录`review_contract_errors`；不重试或改写。已知候选的全局审核哈希/覆盖错误保存`.review-rejected.json`，该候选无最终输出，其余继续；无法归属、重复/缺失候选等批次错误停止。有候选拒绝时状态`completed_with_review_rejections`、退出码2，审计`all_assessments_usable=false`，不能称全部审核成功。报告须列出被隔离数量。
 
@@ -116,7 +118,7 @@ OAuth首次验证及刷新允许最多30秒时钟偏差，仍核验签名、issu
 
 ## alpha.8：分句覆盖与前提检查
 
-新任务生成仍显式用`response_protocol=atomic-bound-v4`，来源审核配置另设`source_review_protocol=clause-bound-v2`，并将`clause_review.py`加入执行源哈希清单。既有alpha.7未设该字段时继续走旧审核，复现使用各自冻结源码，不能混合新旧审核schema或指令。
+alpha.8历史运行生成仍显式用`response_protocol=atomic-bound-v4`，来源审核配置另设`source_review_protocol=clause-bound-v2`，并将`clause_review.py`加入执行源哈希清单。既有alpha.7未设该字段时继续走旧审核，复现使用各自冻结源码，不能混合新旧审核schema或指令。
 
 来源模型只接收本候选实际选中的完整字段和来源日期、脚本前提清单、完整候选及分句编号。未选原话不再因审核被再次发送；facts不是前提重复登记要求。每句的前提、范围和推断分别判定，所有分句通过才保留原atom。关系词提示只帮助核对“仍/恢复”等预设，不自动拒绝自然语言。
 
@@ -126,7 +128,7 @@ OAuth首次验证及刷新允许最多30秒时钟偏差，仍核验签名、issu
 
 ## alpha.9：分句角色与范围边界
 
-新冻结配置设source_review_protocol=scope-bound-v3，增加scope_review.py执行源哈希；生成仍为atomic-bound-v4。新审核有review_version=3及每句role，不能与v2混用。未来条件、历史断言和证据边界分开；policy_withdrawals记录固定未知政策撤回，与语义拒绝和review_pending分列，报告保留与损失。
+alpha.9历史冻结配置设source_review_protocol=scope-bound-v3，增加scope_review.py执行源哈希；生成仍为atomic-bound-v4。新审核有review_version=3及每句role，不能与v2混用。未来条件、历史断言和证据边界分开；policy_withdrawals记录固定未知政策撤回，与语义拒绝和review_pending分列，报告保留与损失。
 
 排除前4批全部32人选另8人，任何新用户请求前固定全部配置和15个执行源。真实原话及审核候选需要该批范围授权，既有套餐授权不替代资料外发授权。生成/审核不看隐藏后续答案；仅现有套餐、额度或传输错误停止，不自动重试，不用付费回退。合成开发第一轮15/16、补足合成前提并增反例后20/20，失败和准备错误原样保留，不冒称独立验证。
 
@@ -138,4 +140,4 @@ validation_report.py status不接受凭证、不读取judge、不发请求，只
 
 ## alpha.11：较小的M臂网格
 
-新M臂与计算基线设计为64生成、最多16批来源审核，仍串行、0自动重试、无付费回退；不将旧未知请求重发。冻结record_selection.py等16执行源；批试capability与实际证据一致，并贯穿原始严格检查与预检。一次空资料atomic探针成功，仅确认当时套餐路径与格式可用，不证明整批剩余额度。新8人外发需本批实际同意；当前只有准备与冻结，尚未发送新用户资料。见[本版记录](context-20261031.md)。
+新M臂与计算基线设计为64生成、最多16批来源审核，仍串行、0自动重试、无付费回退；不将旧未知请求重发。冻结record_selection.py等16执行源；批试capability与实际证据一致，并贯穿原始严格检查与预检。一次空资料atomic探针成功，仅确认当时套餐路径与格式可用，不证明整批剩余额度。新8人外发需本批实际同意；alpha.11发布前只有准备与冻结；随后当批获实际同意并完成，见[完整试验报告](pilot-20261031-context.md)。alpha.13工程更新不重跑或改写旧轮。

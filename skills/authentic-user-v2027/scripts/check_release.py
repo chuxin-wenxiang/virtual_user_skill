@@ -8,6 +8,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = {
+    "scripts/attitude_baseline.py", "scripts/decision_protocol.py", "scripts/decision_review.py",
+    "tests/test_decision_protocol.py", "examples/answer-decision-demo.json", "references/decision-20261031.md",
     "references/pilot-20261031-context.md",
     "scripts/record_selection.py", "tests/test_record_selection.py", "tests/test_memory_comparison.py", "references/context-20261031.md",
     "scripts/validation_report.py", "tests/test_validation_report.py", "tests/test_source_map.py", "references/offline-20261031-evidence-map.md",

@@ -8,6 +8,7 @@ import test_validation_workflow as fm
 import atomic_protocol as atomic, source_registry as sr
 import clause_review as cr
 import scope_review as scope
+import decision_protocol as decision, decision_review as dr
 class PlanReviewTests(unittest.TestCase):
  def test_complete_source_only_review_preserves_candidates_and_detects_tamper(self):
   self.lifecycle(False)
@@ -29,17 +30,21 @@ class PlanReviewTests(unittest.TestCase):
   self.lifecycle(False,"atomic-bound-v4",source_protocol=scope.NAME,clause_invalid=True)
  def test_single_memory_design_complete_mocked_generation_and_source_audit(self):
   self.lifecycle(False,'atomic-bound-v4',source_protocol=scope.NAME,comparison_kind=fm.vp.MEMORY_COMPARISON)
+ def test_decision_protocol_complete_lifecycle(self):
+  self.lifecycle(False,decision.NAME,source_protocol=dr.NAME,comparison_kind=fm.vp.MEMORY_COMPARISON)
  def lifecycle(self,invalid,protocol_name="field-bound-v3",review_invalid=False,batch_invalid=False,source_protocol=None,clause_invalid=False,comparison_kind=fm.vp.TAG_COMPARISON):
   f=fm.ValidationWorkflowTests();f.setUp()
   try:
    root=f.root/'review-plan';root.mkdir();inputs=root/'inputs'
-   if protocol_name=='atomic-bound-v4':fm.vp.build(f.fixture.profiles,inputs,root/'new-judge',per_group=1,repeats=2,response_protocol=protocol_name,comparison_kind=comparison_kind)
+   if protocol_name in ('atomic-bound-v4',decision.NAME):fm.vp.build(f.fixture.profiles,inputs,root/'new-judge',per_group=1,repeats=2,response_protocol=protocol_name,comparison_kind=comparison_kind)
    else:fm.vp.reframe(f.inputs,inputs)
    manifest=au.read_object(inputs/'manifest.json');protocol=au.read_object(inputs/'protocol.json');protocol['response_protocol']=protocol_name;manifest['protocol_sha256']=vw.digest(protocol)
    (inputs/'protocol.json').write_text(json.dumps(protocol));(inputs/'manifest.json').write_text(json.dumps(manifest))
    config=copy.deepcopy(f.config);config.update(provider='openai-chatgpt-plan',model='synthetic-plan-model',revision='provider-alias:synthetic',synthetic=False,parameters={'temperature':None,'top_p':None,'max_output_tokens':None})
-   config['transport']={'route':cp.API+'/responses','store':False,'stream':True,'billing_policy':'subscription_only_no_paid_fallback','reasoning_effort':'low','revision_policy':'provider_alias_exploratory','max_input_characters':40000,'max_output_characters':16000,'reported_output_token_guard':4000,'concurrency':1,'automatic_retries':0,'execution_order':'paired_interleaved_v1','adapter_instructions':'synthetic','response_protocol':protocol_name,'output_schema_sha256':vw.digest(atomic.schema() if protocol_name=='atomic-bound-v4' else ap.schema()),'execution_sources_sha256':{}}
+   config['transport']={'route':cp.API+'/responses','store':False,'stream':True,'billing_policy':'subscription_only_no_paid_fallback','reasoning_effort':'low','revision_policy':'provider_alias_exploratory','max_input_characters':40000,'max_output_characters':16000,'reported_output_token_guard':4000,'concurrency':1,'automatic_retries':0,'execution_order':'paired_interleaved_v1','adapter_instructions':'synthetic','response_protocol':protocol_name,'output_schema_sha256':vw.digest(decision.schema() if protocol_name==decision.NAME else atomic.schema() if protocol_name=='atomic-bound-v4' else ap.schema()),'execution_sources_sha256':{}}
    config['transport']['execution_sources_sha256']['record_selection.py']=hashlib.sha256((Path(au.__file__).parent/'record_selection.py').read_bytes()).hexdigest()
+   if protocol_name==decision.NAME:
+    config['transport']['execution_sources_sha256']={n:hashlib.sha256((Path(au.__file__).parent/n).read_bytes()).hexdigest() for n in vw.DECISION_EXECUTION_SOURCES}
    if source_protocol:
     config['transport']['source_review_protocol']=source_protocol
     config['transport']['source_review_model']='synthetic-review-model'
@@ -53,6 +58,10 @@ class PlanReviewTests(unittest.TestCase):
      payload=vw.decode_prompt(prompt)[1];book=sr.lookup(payload['user_context']['evidence']);ref=next((r for r,v in book.items() if v.get('field')=='text'),None)
      atoms=[] if ref is None else [{'kind':'conditional_forecast','text':'如果相似体验延续，可能维持评价。','condition':'similar_experience','confidence':'low','anchors':[{'ref':ref,'quote':sr.value_text(book[ref])}]}]
      wire={'protocol_version':4,'facts':[],'atoms':atoms,'direction':'passive' if atoms else 'unknown','direction_atom':0 if atoms else None,'unknowns':['no_observed_outcome']}
+    if instructions=='synthetic' and protocol_name==decision.NAME:
+     context=vw.decode_prompt(prompt)[1]['user_context'];book=sr.lookup(context['evidence']);ref=next(r for r,v in book.items() if v.get('field')=='score')
+     wire=decision.empty();wire['facts']=[ref];wire['reactions']=[{'text':'如果此次体验改变，可能影响评价。','source_refs':[ref],'confidence':'low'}]
+     if context['capability']['level']=='individual_memory':wire['prediction']={'direction':'passive','reason':'仅依据所选历史评分作未校准估计。','source_refs':[ref],'confidence':'low'}
     if instructions=='synthetic' and invalid and len(counter)==1:wire['direction']='promoter'
     if instructions!='synthetic':wire={'reviews':[{'review_id':t['review_id'],'wire_sha256':t['wire_sha256'],'evidence_sha256':t['evidence_sha256'],'items':[]} for t in json.loads(prompt)['tasks']]}
     if instructions!='synthetic' and protocol_name=='atomic-bound-v4':
@@ -67,6 +76,9 @@ class PlanReviewTests(unittest.TestCase):
          for c in item['clauses']:c['role']='future_condition' if c['clause_index']==0 else 'future_consequence'
        if clause_invalid and not damaged and row['items']:
         row['items'][0]['clauses'][0]['clause_index']=11;damaged.append(True)
+    if instructions!='synthetic' and protocol_name==decision.NAME:
+     for row,task in zip(wire['reviews'],json.loads(prompt)['tasks']):
+      row['review_version']=4;row['items']=[{'atom_index':a['atom_index'],'clauses':[{'clause_index':c['clause_index'],'role':'future_consequence' if a['kind']=='attitude_estimate' or c['clause_index']>0 else 'future_condition','premise':'grounded','scope':'within_source','inference':'bounded_hypothesis','source_refs':a['selected_refs'],'issue':'none','problem_span':'','reason':'Synthetic assembly fixture, not model validation.'} for c in a['clauses']]} for a in task['atom_bindings']]
     if instructions!='synthetic' and review_invalid and len(counter)==65:wire['reviews'][0]['wire_sha256']='wrong-candidate'
     if instructions!='synthetic' and batch_invalid:wire={'reviews':[]}
     return {'text':json.dumps(wire),'response':{'id':'synthetic-'+str(len(counter)),'status':'completed','model':model,'usage':{'input_tokens':100,'output_tokens':50}},'request_body_sha256':hashlib.sha256(json.dumps(body,ensure_ascii=False).encode()).hexdigest(),'paid_fallback_used':False}

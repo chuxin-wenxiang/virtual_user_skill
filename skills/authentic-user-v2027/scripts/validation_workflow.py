@@ -18,7 +18,11 @@ import validation_prep as vp
 import claim_protocol as typed
 import attribution_protocol as field_typed
 import atomic_protocol as atomic
+import decision_protocol as decision
+import attitude_baseline as baseline_model
 import source_registry as sr
+
+DECISION_EXECUTION_SOURCES = {"authentic_user.py","record_selection.py","claim_protocol.py","chatgpt_plan.py","validation_prep.py","validation_workflow.py","plan_trial.py","trial_audit.py","attribution_protocol.py","attribution_review.py","plan_review.py","source_registry.py","atomic_protocol.py","atomic_review.py","clause_review.py","scope_review.py","attitude_baseline.py","decision_protocol.py","decision_review.py"}
 
 METRICS = ("fact_accuracy", "traceability", "attitude_direction", "theme_overlap",
            "fabricated_experience_rate", "unknown_restraint")
@@ -106,14 +110,20 @@ def audit_inputs(input_dir):
         require(text_digest(header) == manifest.get("shared_instructions_sha256"), "Shared instructions changed")
         if protocol.get('record_selection_policy') is not None:
             require(payload['user_context'].get('record_selection_policy') == protocol['record_selection_policy'], 'Prompt selection policy differs from frozen design')
-        if protocol.get("response_protocol") == "atomic-bound-v4":
+        if protocol.get("response_protocol") in ("atomic-bound-v4", decision.NAME):
             require(payload["user_context"].get("source_catalogue") == sr.catalogue(payload["user_context"]["evidence"]), "Derived source catalogue differs from visible evidence")
         if protocol.get('source_map_protocol') is not None:
             require(protocol['source_map_protocol'] == sr.MAP_VERSION, 'Unsupported source map protocol')
-            require(protocol.get('response_protocol') == 'atomic-bound-v4', 'Source maps require atomic answers')
+            require(protocol.get('response_protocol') in ('atomic-bound-v4',decision.NAME), 'Source maps require source-bound answers')
             require(payload['user_context'].get('source_map') == sr.record_map(payload['user_context']['evidence']), 'Source map differs from selected records')
         else:
             require('source_map' not in payload['user_context'], 'Unregistered source map in frozen input')
+        if protocol.get("response_protocol") == decision.NAME:
+            require(comparison==vp.MEMORY_COMPARISON and protocol.get("baseline_protocol")=="last_same_industry_v1" and protocol.get('source_map_protocol')==sr.MAP_VERSION, "Decision inputs require memory design, field mapping and baseline contract")
+            require(protocol.get('prediction_target')=='preregistered_next_heldout_same_industry_nps_record', 'Decision prediction target must be an explicitly frozen NPS record')
+            u=payload["user_context"];target=u.get("target_industry")
+            require(isinstance(target,str) and target in au.INDUSTRIES and all(r.get("industry")==target for r in u["evidence"]), "Decision target industry differs from visible records")
+            require(u.get("baseline")==baseline_model.card(u["evidence"],target), "Baseline card differs from selected history")
         prompts[path] = {"sha256": record["sha256"], "payload": payload}
     require(manifest.get("unique_prompts") == len(prompts), "Prompt count mismatch")
     calls, keys, cases = [], set(), set()
@@ -175,9 +185,9 @@ def model_config(config):
                 transport.get("billing_policy") == "subscription_only_no_paid_fallback", "Invalid plan-only route policy")
         require(transport.get("reasoning_effort") == "low" and transport.get("revision_policy") == "provider_alias_exploratory",
                 "Plan pilot must record supported effort and unpinned alias limitation")
-        require(transport.get('source_review_protocol') in (None,'clause-bound-v2','scope-bound-v3'),'Unknown source review protocol')
+        require(transport.get('source_review_protocol') in (None,'clause-bound-v2','scope-bound-v3','decision-scope-v1'),'Unknown source review protocol')
         if transport.get('source_review_protocol'):
-            require(transport.get('response_protocol')=='atomic-bound-v4','Clause review requires atomic generation')
+            require((transport.get('source_review_protocol')=='decision-scope-v1' and transport.get('response_protocol')==decision.NAME) or (transport.get('source_review_protocol')!='decision-scope-v1' and transport.get('response_protocol')=='atomic-bound-v4'),'Source review differs from generation protocol')
         if 'source_review_model' in transport:
             value=transport['source_review_model']
             require(isinstance(value,str) and bool(value.strip()) and value.strip().lower() not in ('auto','latest','default'),'Source reviewer must be explicitly frozen')
@@ -227,6 +237,11 @@ def freeze(input_dir, config_file, review_file, output_dir):
         source_file = Path(__file__).parent/'record_selection.py'
         require(config['transport'].get('execution_sources_sha256', {}).get('record_selection.py') == hashlib.sha256(source_file.read_bytes()).hexdigest(), 'New selection policy requires its frozen execution source')
     require(protocol.get("response_protocol", "legacy-v1") == config.get("transport", {}).get("response_protocol", "legacy-v1"), "Frozen response protocol differs from input instructions")
+    if protocol.get("response_protocol")==decision.NAME and config["provider"]=="openai-chatgpt-plan":
+        required=DECISION_EXECUTION_SOURCES
+        frozen=config["transport"].get("execution_sources_sha256",{})
+        require(required<=set(frozen) and all(frozen[n]==hashlib.sha256((Path(__file__).parent/n).read_bytes()).hexdigest() for n in required), "Decision run requires all 19 current execution sources frozen")
+        require(config["transport"].get("source_review_protocol")=="decision-scope-v1", "Decision review must be explicitly frozen")
     if config["seed_policy"] == "same_repeat_schedule":
         require(len(config["repeat_seeds"]) == max(c["run"] for c in calls), "Seed schedule must cover each repeat exactly")
     require(review.get("inputs_manifest_sha256") == digest(manifest), "Review belongs to another input set")
@@ -267,15 +282,16 @@ def load_run(run_dir):
 
 def check_common_answer(payload, answer, response_protocol=None):
     require(isinstance(answer, dict), "Response answer must be an object")
-    expected_version = {'typed-source-v2':2,'field-bound-v3':3,'atomic-bound-v4':4}.get(response_protocol)
+    expected_version = {'typed-source-v2':2,'field-bound-v3':3,'atomic-bound-v4':4,decision.NAME:5}.get(response_protocol)
     if expected_version is not None:
         require(answer.get('protocol_version') == expected_version, 'Answer protocol differs from frozen response protocol')
     require(isinstance(answer.get("answer"), str) and answer["answer"].strip(), "Answer text is required")
     require(answer.get("direction") in ("promoter", "passive", "detractor", "unknown"), "Invalid attitude direction")
-    if answer.get("protocol_version") in (2,3,4):
+    if answer.get("protocol_version") in (2,3,4,5):
         try:
-            renderer = atomic if answer.get("protocol_version")==4 else field_typed if answer.get("protocol_version")==3 else typed
-            expected = renderer.render(payload["user_context"]["evidence"], answer.get("wire_answer"),payload['user_context'].get('capability',{}).get('level'))
+            renderer = decision if answer.get("protocol_version")==5 else atomic if answer.get("protocol_version")==4 else field_typed if answer.get("protocol_version")==3 else typed
+            context=payload["user_context"]
+            expected = renderer.render(context["evidence"], answer.get("wire_answer"),context.get("capability",{}).get("level"),context.get("target_industry")) if renderer is decision else renderer.render(context["evidence"], answer.get("wire_answer"),context.get("capability",{}).get("level"))
         except typed.ProtocolError as exc:
             raise au.InputError(str(exc)) from exc
         require(answer == expected, "Rendered answer differs from original typed wire answer")

@@ -12,10 +12,15 @@ import atomic_protocol
 import atomic_review
 import clause_review
 import scope_review
+import decision_protocol
+import decision_review
 
 def review_protocol(run):
     transport=run['model_config']['transport']
     name=transport.get('source_review_protocol')
+    if transport.get('response_protocol')==decision_protocol.NAME:
+        vw.require(name==decision_review.NAME,'Decision review must be explicitly frozen')
+        return decision_review.NAME
     vw.require(name in (None,clause_review.NAME,scope_review.NAME),'Unsupported source review protocol')
     if name:
         vw.require(transport.get('response_protocol')=='atomic-bound-v4','Clause review requires atomic answers')
@@ -32,21 +37,28 @@ def review_timeout(run):
     return value
 
 def protocols(run):
+    if run["model_config"]["transport"].get("response_protocol")==decision_protocol.NAME:
+        review_protocol(run)
+        return decision_protocol, decision_review
     if run["model_config"]["transport"].get("response_protocol") == "atomic-bound-v4":
         return atomic_protocol, scope_review if review_protocol(run)==scope_review.NAME else clause_review if review_protocol(run)==clause_review.NAME else atomic_review
     return ap, ar
 
 def batch_schema(protocol="field-bound-v3"):
-    item=(scope_review if protocol==scope_review.NAME else clause_review if protocol==clause_review.NAME else atomic_review if protocol == "atomic-bound-v4" else ar).schema();item['properties']['review_id']={'type':'string'};item['required'].append('review_id')
+    item=(decision_review if protocol==decision_review.NAME else scope_review if protocol==scope_review.NAME else clause_review if protocol==clause_review.NAME else atomic_review if protocol == "atomic-bound-v4" else ar).schema();item['properties']['review_id']={'type':'string'};item['required'].append('review_id')
     return {'type':'object','properties':{'reviews':{'type':'array','minItems':1,'maxItems':4,'items':item}},'required':['reviews'],'additionalProperties':False}
 
 def outbound_tasks(batch, protocol):
-    if protocol not in ('atomic-bound-v4',clause_review.NAME,scope_review.NAME): return batch
+    if protocol not in ('atomic-bound-v4',clause_review.NAME,scope_review.NAME,decision_review.NAME): return batch
     return [{k:v for k,v in task.items() if k not in ('evidence','selected_fields','precheck','original_wire_sha256')} for task in batch]
 
 
-def derive(evidence, wire, review, run):
+def derive(evidence, wire, review, run, level=None, industry=None):
     ap, ar = protocols(run)
+    if ap is decision_protocol:
+        errors=[];policy=[]
+        final=ar.apply(evidence,wire,review,errors,policy,level,industry)
+        return {"answer":ap.render(evidence,final,level,industry),"review_contract_errors":errors,"policy_withdrawals":policy}
     if ap is atomic_protocol:
         errors = []
         policy=[]
@@ -118,7 +130,7 @@ def precheck_bundle(bundle, answer):
     au.validate_bundle(bundle)
     vw.require(answer.get('bundle_sha256') == bundle['bundle_sha256'], 'Precheck answer belongs to another bundle')
     wire = answer.get('wire_answer')
-    filtered, log = precheck(bundle['evidence'], wire, bundle['capability']['level'])
+    filtered, log = decision_protocol.precheck(bundle['evidence'],wire,bundle['capability']['level'],bundle.get('industry_filter')) if isinstance(wire,dict) and wire.get('protocol_version')==5 else precheck(bundle['evidence'], wire, bundle['capability']['level'])
     rendered = au.render_bound_answer(bundle, {'bundle_sha256':bundle['bundle_sha256'], 'answer_mode':answer.get('answer_mode'), 'wire_answer':filtered})
     return rendered, {'origin':'deterministic_precheck_withdrawal', 'bundle_sha256':bundle['bundle_sha256'], 'original_wire_sha256':ar.digest(wire), 'filtered_wire_sha256':ar.digest(filtered), 'precheck':log}
 
@@ -130,7 +142,12 @@ def candidates(root,calls,prompts,run):
     for cid in order:
         envelope=au.read_object(root/'incoming'/(cid+'.json'));wire=envelope['answer']['wire_answer'];payload=prompts[calls[cid]['prompt']]['payload']
         try:
-            if ap is atomic_protocol:
+            if ap is decision_protocol:
+                context=payload['user_context']
+                candidate,log=ap.precheck(context['evidence'],wire,context.get('capability',{}).get('level'),context.get('target_industry'))
+                task=ar.task(context['evidence'],candidate,context.get('capability',{}).get('level'),context.get('target_industry'))
+                task.update(original_wire_sha256=ar.digest(wire),precheck=log)
+            elif ap is atomic_protocol:
                 candidate, log = precheck(payload['user_context']['evidence'], wire, payload['user_context'].get('capability',{}).get('level'))
                 task=ar.task(payload['user_context']['evidence'],candidate)
                 task.update(original_wire_sha256=ar.digest(wire), precheck=log)
@@ -149,7 +166,7 @@ def execute(run_dir,credential_dir,consent_file,phase_config=None):
     sources=phase_sources(run,phase_config)
     consent=au.read_object(consent_file)
     vw.require(consent.get('approved') is True and consent.get('source_review_approved') is True and consent.get('run_sha256')==run['run_sha256'] and consent.get('destination')==cp.API+'/responses' and consent.get('subscription_only') is True and bool(consent.get('human_authorization')),'Run-bound source audit authorization required')
-    vw.require(run['model_config']['transport'].get('response_protocol') in ('field-bound-v3','atomic-bound-v4'),'Source audit requires a supported source-bound protocol')
+    vw.require(run['model_config']['transport'].get('response_protocol') in ('field-bound-v3','atomic-bound-v4',decision_protocol.NAME),'Source audit requires a supported source-bound protocol')
     dest=root/'source-review';dest.mkdir(mode=0o700,exist_ok=True);lock=dest/'.lock'
     try:fd=os.open(lock,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
     except FileExistsError:raise cp.PlanStop('Source reviewer already running or stale lock needs review') from None
@@ -187,14 +204,14 @@ def execute(run_dir,credential_dir,consent_file,phase_config=None):
             for row in out['reviews']:
                 rid=row.get('review_id');vw.require(rid in expected and rid not in seen,'Unknown or duplicate review ID');seen.add(rid)
                 assessment={k:v for k,v in row.items() if k!='review_id'};task=expected[rid]
-                try:derived=derive(task['evidence'],task['candidate'],assessment,run)
+                try:derived=derive(task['evidence'],task['candidate'],assessment,run,task.get('capability_level'),task.get('target_industry'))
                 except ap.ProtocolError as exc:
                     cid=by_review[rid]['call_id']
                     vw.save(dest/(cid+'.review-rejected.json'),{'call_id':cid,'review_id':rid,'origin':'global_assessment_contract_rejection','candidate_sha256':task['wire_sha256'],'raw_assessment_sha256':ar.digest(assessment),'error':str(exc),'batch':bid})
                     state['global_review_rejections']+=1
                     continue
-                if ap is atomic_protocol: derived.update(original_wire_sha256=task['original_wire_sha256'], precheck=task['precheck'])
-                if protocol in (clause_review.NAME,scope_review.NAME):state['review_pending_atoms']+=len(derived['review_contract_errors'])
+                if ap in (atomic_protocol,decision_protocol): derived.update(original_wire_sha256=task['original_wire_sha256'], precheck=task['precheck'])
+                if protocol in (clause_review.NAME,scope_review.NAME,decision_review.NAME):state['review_pending_atoms']+=len(derived['review_contract_errors'])
                 cid=by_review[rid]['call_id']
                 vw.save(dest/(cid+'.assessment.json'),assessment)
                 vw.save(dest/(cid+'.final.json'),{'call_id':cid,'origin':'derived_source_review','review_origin':'separate_plan_model_context','candidate_sha256':task['wire_sha256'],'assessment_sha256':ar.digest(assessment),**derived})
@@ -239,26 +256,30 @@ def audit(run_dir):
         for task in batch:
             cid=key[task['review_id']]['call_id'];source=au.read_object(root/'incoming'/(cid+'.json'))['answer']['wire_answer'];evidence=prompts[calls[cid]['prompt']]['payload']['user_context']['evidence']
             candidate = source
-            if ap is atomic_protocol:
+            if ap is decision_protocol:
+                context=prompts[calls[cid]['prompt']]['payload']['user_context']
+                candidate,log=ap.precheck(evidence,source,context.get('capability',{}).get('level'),context.get('target_industry'))
+                vw.require(task['original_wire_sha256']==ar.digest(source) and task['precheck']==log, 'Decision precheck differs from original')
+            elif ap is atomic_protocol:
                 candidate, log = precheck(evidence, source, prompts[calls[cid]['prompt']]['payload']['user_context'].get('capability',{}).get('level'))
                 vw.require(task['original_wire_sha256']==ar.digest(source) and task['precheck']==log, 'Precheck differs from original strict candidate')
             vw.require(task['candidate']==candidate and task['evidence']==evidence and task['wire_sha256']==ar.digest(candidate) and task['evidence_sha256']==ar.digest(evidence),'Review task differs from original or deterministic withdrawal')
             assessment={k:v for k,v in by_id[task['review_id']].items() if k!='review_id'}
-            try:expected=derive(evidence,candidate,assessment,run)
+            try:expected=derive(evidence,candidate,assessment,run,task.get('capability_level'),task.get('target_industry'))
             except ap.ProtocolError as exc:
                 rejected_review={'call_id':cid,'review_id':task['review_id'],'origin':'global_assessment_contract_rejection','candidate_sha256':task['wire_sha256'],'raw_assessment_sha256':ar.digest(assessment),'error':str(exc),'batch':bid}
                 vw.require(cid in review_rejections and au.read_object(dest/(cid+'.review-rejected.json'))==rejected_review, 'Rejected review differs from raw response')
                 reviewed+=1;global_rejections+=1;continue
             vw.require(cid not in review_rejections and assessment==au.read_object(dest/(cid+'.assessment.json')),'Saved assessment differs from raw response')
             derived=au.read_object(dest/(cid+'.final.json'))
-            if ap is atomic_protocol: expected.update(original_wire_sha256=ar.digest(source), precheck=log)
+            if ap in (atomic_protocol,decision_protocol): expected.update(original_wire_sha256=ar.digest(source), precheck=log)
             vw.require(derived['call_id']==cid and derived['candidate_sha256']==ar.digest(candidate) and derived['assessment_sha256']==ar.digest(assessment) and all(derived.get(k)==v for k,v in expected.items()),'Derived output not reproducible from review')
             reviewed+=1
     vw.require(all(intervals[i][1]<=intervals[i+1][0] for i in range(len(intervals)-1)),'Overlapping source review calls')
     state=au.read_object(dest/'status.json');vw.require(state['status'] in ('completed','completed_with_review_rejections','completed_with_pending_reviews') and state['reviewed_answers']==reviewed==len(records) and state['structural_rejections']==len(rejected) and state.get('global_review_rejections',0)==global_rejections and state['completed_batches']==len(ids) and state['input_tokens']==total_in and state['output_tokens']==total_out,'Source review counters mismatch')
     pending=sum(len(au.read_object(p).get('review_contract_errors',[])) for p in dest.glob('*.final.json'))
-    if protocol in (clause_review.NAME,scope_review.NAME):vw.require(state['review_pending_atoms']==pending,'Pending atom count differs')
-    return {'local_integrity_passed':True,'provider_verified_independently':False,'total_candidates':len(calls),'structural_rejections':len(rejected),'reviewed_answers':reviewed,'global_review_rejections':global_rejections,'all_assessments_usable':global_rejections==0 and pending==0,'all_atom_reviews_valid':pending==0,'valid_assessments':reviewed-global_rejections,'review_contract_error_atoms':pending,'review_pending_atom_count':pending if protocol in (clause_review.NAME,scope_review.NAME) else 0,'review_protocol':protocol,'review_model':plan['model'],'boundary_policy_withdrawals':sum(len(au.read_object(p).get('policy_withdrawals',[])) for p in dest.glob('*.final.json')),'completed_batches':len(ids),'unique_response_ids':len(ids),'overlapping_calls':0,'input_tokens':total_in,'output_tokens':total_out,'paid_fallback_used':False,'receipt_index_sha256':vw.digest(hashes),'origin':'separate_plan_model_context; not independent human'}
+    if protocol in (clause_review.NAME,scope_review.NAME,decision_review.NAME):vw.require(state['review_pending_atoms']==pending,'Pending atom count differs')
+    return {'local_integrity_passed':True,'provider_verified_independently':False,'total_candidates':len(calls),'structural_rejections':len(rejected),'reviewed_answers':reviewed,'global_review_rejections':global_rejections,'all_assessments_usable':global_rejections==0 and pending==0,'all_atom_reviews_valid':pending==0,'valid_assessments':reviewed-global_rejections,'review_contract_error_atoms':pending,'review_pending_atom_count':pending if protocol in (clause_review.NAME,scope_review.NAME,decision_review.NAME) else 0,'review_protocol':protocol,'review_model':plan['model'],'boundary_policy_withdrawals':sum(len(au.read_object(p).get('policy_withdrawals',[])) for p in dest.glob('*.final.json')),'completed_batches':len(ids),'unique_response_ids':len(ids),'overlapping_calls':0,'input_tokens':total_in,'output_tokens':total_out,'paid_fallback_used':False,'receipt_index_sha256':vw.digest(hashes),'origin':'separate_plan_model_context; not independent human'}
 
 def main():
     import sys

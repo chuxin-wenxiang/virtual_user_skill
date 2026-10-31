@@ -50,7 +50,7 @@ v2027 已有 `select_records()`，按词项重合、日期等确定性规则选�
 
 ## 建议的下一轮顺序与验收
 
-下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。alpha.11进一步实现问题锚点与最近背景检索、并列评分消歧及单记忆臂网格，见[实现与准备状态](../skills/authentic-user-v2027/references/context-20261031.md)。alpha.12已补齐alpha.11冻结算法的[新8人完整结果](../skills/authentic-user-v2027/references/pilot-20261031-context.md)：64次生成、16批审核完成，但态度命中仍低于简单NPS延续。独立人工评分与预测优势未成立；原alpha.9缺失不回填，不能将工程实现视为整张清单已验证有效。
+下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。alpha.11进一步实现问题锚点与最近背景检索、并列评分消歧及单记忆臂网格，见[实现与准备状态](../skills/authentic-user-v2027/references/context-20261031.md)。alpha.12已补齐alpha.11冻结算法的[新8人完整结果](../skills/authentic-user-v2027/references/pilot-20261031-context.md)：64次生成、16批审核完成，但态度命中仍低于简单NPS延续。alpha.13进一步实现[态度估计、条件反应和基线分离](../skills/authentic-user-v2027/references/decision-20261031.md)及脚本提取引文，199项工程检查通过，尚无新协议真实模型效果结果。独立人工评分与预测优势未成立；原alpha.9缺失不回填，不能将工程实现视为整张清单已验证有效。
 
 | 优先级 | 实际改动 | 验收与限制 | 模型/费用影响 |
 |---|---|---|---|

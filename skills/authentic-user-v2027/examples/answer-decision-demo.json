@@ -1,0 +1,41 @@
+{
+  "synthetic": true,
+  "note": "Hand-authored synthetic protocol example; not a model experiment.",
+  "bundle_sha256": "3c8531a74a8743af653390039ec7c7e83a5d183560920c0abe39c334ffb89f07",
+  "answer_mode": "simulation",
+  "wire_answer": {
+    "protocol_version": 5,
+    "facts": [
+      "F014",
+      "T001"
+    ],
+    "summaries": [],
+    "hypotheses": [
+      {
+        "text": "退改条件能否提前说明，可能是相关关注点。",
+        "source_refs": [
+          "F016"
+        ],
+        "confidence": "low"
+      }
+    ],
+    "reactions": [
+      {
+        "text": "如果此次退改条件提前说明，可能更愿意推荐。",
+        "source_refs": [
+          "F016"
+        ],
+        "confidence": "low"
+      }
+    ],
+    "prediction": {
+      "direction": "promoter",
+      "reason": "所选最近同业调查评分为9，延续只作为未校准估计。",
+      "source_refs": [
+        "F014"
+      ],
+      "confidence": "low"
+    },
+    "unknowns": []
+  }
+}

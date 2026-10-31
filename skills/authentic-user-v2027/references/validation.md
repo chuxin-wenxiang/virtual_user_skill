@@ -2,6 +2,8 @@
 
 `scripts/validation_prep.py` 将真实档案变成可重复检查的时间切分材料，不调用模型，不生成评分，不包含模拟效果结论。
 
+当前v5单记忆臂的准备、基线、19源冻结和组件审核见[decision协议与计划](decision-20261031.md)。下文默认分组、双臂及alpha.3–alpha.12各节记录兼容入口；不适用于将新M臂当成双臂，历史运行不换schema。
+
 ## 严格候选与试跑分组
 
 默认只扫描核心档。每人选择一条至少 15 字、带合法分数的较晚原话作为隐藏记录；仅使用它之前的记录，并要求至少 4 次有分数参评、3 条原话、同一行业至少 2 次参评及 2 条原话、可见历史跨度至少 180 天。
@@ -213,3 +215,14 @@ alpha.6两条件共同使用 field-bound-v3，冻结同一schema、指令、模�
 新M输入包含所选证据的capability，输入审计重算核对；渲染、原始严格导入、失败评审与预检使用该档位。冻结回答协议须相符，旧自由文本保留为原始失败。完整审计、盲评包和评分模板按实际M网格生成；单臂语义评分按用户描述，Q2单独与计算基线作用户配对。独立评分须有真实评审者，未完成就明示。
 
 现代prepare/build可显式设置selection_policy和证据预算；本轮使用question_recent_context_v1及24条/40,000证据字符，source_map继续逐条选前提。套餐配置冻结record_selection.py在内的16执行源，分析工具也另存哈希。新8人固定排除前40位、0重合，能力档位及并列评分的执行前修订均保存原稿，尚待本批外发同意。具体记录与CLI见[alpha.11说明](context-20261031.md)。
+
+
+## alpha.13：点估计与条件反应分开
+
+v5仅支持memory_vs_computed_baselines，明确target_industry并附从选定历史重算的baseline卡。Q2显式询问预先留出的下一条同业NPS记录类别，改变条件另列；对照的隐藏目标仍是严格截止后的记录评价，不以条件假设替代它，也不称已核验了再次购买或实际推荐行为。下一次情景及事件是否独立仍有未观测差异，保留此限制。
+
+transport使用response_protocol=decision-bound-v5、source_review_protocol=decision-scope-v1，output_schema_sha256取decision_protocol.schema()；19源列表为validation_workflow.DECISION_EXECUTION_SOURCES，freeze与执行均检查，不混用新旧审核。普通宿主默认v5，旧批试默认保持历史行为，必须显式选择新协议。
+
+AI命中只读取answer.direction，prediction为空仍unknown；渲染中的baseline独立存在，不能替它补分。原始失败、预检撤回、语义撤下、边界政策与局部待审分别计。旧8人只做兼容回放，没有重跑模型、改写435份旧文件或替换7份原始失败。199项离线工程检查不构成新模型效果结论。
+
+新独立样本先登记排除全部旧人和抽样规则，不在看结果后换人；自然分布主结果与变化子集/挑战集分列，不把挑战集当总体。按用户统计覆盖和风险，同时比较最近NPS及常数基线；来源先评并封存，再开隐藏结果；独立人工评分须实际发生，不由assistant冒称。

@@ -210,11 +210,11 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
     import record_selection as rs
     if comparison_kind not in (TAG_COMPARISON, MEMORY_COMPARISON) or selection_policy not in rs.POLICIES:
         raise au.InputError('Unsupported comparison or selection policy')
-    if comparison_kind == MEMORY_COMPARISON and response_protocol != 'atomic-bound-v4':
-        raise au.InputError('Single-memory validation requires atomic-bound-v4')
+    if comparison_kind == MEMORY_COMPARISON and response_protocol not in ('atomic-bound-v4','decision-bound-v5'):
+        raise au.InputError('Single-memory validation requires an explicit source-bound protocol')
     if not (type(per_group) is int and 1 <= per_group <= 8 and type(max_records) is int and 1 <= max_records <= 100 and type(max_chars) is int and 500 <= max_chars <= 200000):
         raise au.InputError('Invalid sample size or evidence limits')
-    if response_protocol not in (None, "field-bound-v3", "atomic-bound-v4"):
+    if response_protocol not in (None, "field-bound-v3", "atomic-bound-v4", "decision-bound-v5"):
         raise au.InputError("Unsupported preparation response protocol")
     if type(repeats) is not int or not 1 <= repeats <= 5:
         raise au.InputError("repeats must be 1–5")
@@ -240,6 +240,15 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
         protocol.update(protocol_version="fresh-user-atomic-bound-v4", response_protocol=response_protocol,
                         source_map_protocol=sr.MAP_VERSION,
                         target_factor_screen="explicit lexical topic beyond generic praise; not semantic certification")
+    if response_protocol == "decision-bound-v5":
+        import decision_protocol as decision
+        import source_registry as sr
+        if comparison_kind != MEMORY_COMPARISON:
+            raise au.InputError("Decision protocol requires the single-memory design; no silent tag-arm fallback")
+        shared = decision.INSTRUCTIONS + sr.MAP_INSTRUCTIONS + "\nINPUT_JSON:\n"
+        protocol.update(protocol_version="fresh-user-decision-bound-v5",response_protocol=response_protocol,source_map_protocol=sr.MAP_VERSION,baseline_protocol="last_same_industry_v1",prediction_target="preregistered_next_heldout_same_industry_nps_record")
+        protocol["questions"] = dict(protocol["questions"])
+        protocol["questions"]["Q2"] = "请估计预先留出的下一条{industry}NPS记录的评价类别：推荐、观望还是不推荐；证据不足可未知。另列什么条件可能改变态度，不把条件成立当作已发生，也不把评价当作实际购买或推荐行为。"
     protocol["pilot_excludes_zero"] = not include_zero
     protocol["repeats_per_question_condition"] = repeats
     if comparison_kind == MEMORY_COMPARISON:
@@ -281,10 +290,14 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
                            "user_context": {"evidence": data, 'record_selection_policy': selection_policy}}
                 if comparison_kind == MEMORY_COMPARISON:
                     payload['user_context']['capability'] = au.summarize(data)[0]
-                if response_protocol == "atomic-bound-v4":
+                if response_protocol in ("atomic-bound-v4","decision-bound-v5"):
                     import source_registry as sr
                     payload["user_context"]["source_catalogue"] = sr.catalogue(data)
                     payload["user_context"]["source_map"] = sr.record_map(data)
+                if response_protocol == "decision-bound-v5":
+                    import attitude_baseline as baseline
+                    payload["user_context"]["target_industry"] = candidate["industry"]
+                    payload["user_context"]["baseline"] = baseline.card(data,candidate["industry"])
                 prompt = shared + json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
                 relative = f"{case}/{label}/{qid}.txt"
                 au.write_new(str(inputs / relative), prompt)
@@ -361,7 +374,7 @@ def main():
     parser.add_argument("--per-group", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument('--comparison', choices=(TAG_COMPARISON, MEMORY_COMPARISON), default=TAG_COMPARISON)
-    parser.add_argument('--response-protocol', choices=('field-bound-v3', 'atomic-bound-v4'))
+    parser.add_argument('--response-protocol', choices=('field-bound-v3', 'atomic-bound-v4', 'decision-bound-v5'))
     parser.add_argument('--selection-policy', choices=('question_recent_context_v1', 'question_token_overlap_then_recency'), default='question_recent_context_v1')
     parser.add_argument('--max-records', type=int, default=100)
     parser.add_argument('--max-chars', type=int, default=40000)
