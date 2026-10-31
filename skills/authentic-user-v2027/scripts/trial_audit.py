@@ -48,7 +48,7 @@ def audit(run_dir):
             vw.require(envelope['usage'][field]==response['usage'][field],'Returned usage mismatch')
         inputs+=response['usage']['input_tokens'];outputs+=response['usage']['output_tokens']
         vw.require(saved.get('paid_fallback_used') is False,'Unexpected billing path')
-        try:vw.check_common_answer(prompts[call['prompt']]['payload'],envelope['answer']);passed=True
+        try:vw.check_common_answer(prompts[call['prompt']]['payload'],envelope['answer'],transport.get('response_protocol'));passed=True
         except au.InputError:passed=False
         vw.require((attempt['status']=='imported')==passed,'First check disagrees with current contract; do not silently replace')
         if passed:valid+=1

@@ -204,3 +204,12 @@ alpha.6两条件共同使用 field-bound-v3，冻结同一schema、指令、模�
 现代atomic准备会登记source_map_protocol=record-fields-v1，并给两条件相同的同记录字段选择指导。输入审计重算source_map，与来源目录和实际所选记录核对，不合并同日记录或自动补上未选前提。旧输入无映射仍可审计；legacy reframe仅支持未带映射的旧材料，避免静默丢弃契约。记录检索排序未改变。
 
 中断时用validation_report.py status只读列出响应、未知请求、未尝试与最终缺失；它不续跑，也不替代trial_audit.py或plan_review.audit。模型阶段结束后，用attitude --model-phases-ended --phase original或source-final读取本地judge，输出全部Q2位置命中、覆盖、条件命中与简单基线，按用户比较。它只做事后描述，不代替独立语义评分，也不能把缺失最终结果当作预测变差的证据。命令、单位与本轮离线核对见[alpha.10离线记录](offline-20261031-evidence-map.md)。
+
+
+## alpha.11：单记忆臂对计算基线
+
+新增comparison_kind=memory_vs_computed_baselines，M条件只有个体记忆：8人×4题×2重复=64生成，最多16批来源审核。模型不生成标签臂，最近同业NPS及三种固定类别由本地脚本计算。原历史标签—记忆双臂是另一种设计，旧网格不改写；不能把新M回答叫标签对照。
+
+新M输入包含所选证据的capability，输入审计重算核对；渲染、原始严格导入、失败评审与预检使用该档位。冻结回答协议须相符，旧自由文本保留为原始失败。完整审计、盲评包和评分模板按实际M网格生成；单臂语义评分按用户描述，Q2单独与计算基线作用户配对。独立评分须有真实评审者，未完成就明示。
+
+现代prepare/build可显式设置selection_policy和证据预算；本轮使用question_recent_context_v1及24条/40,000证据字符，source_map继续逐条选前提。套餐配置冻结record_selection.py在内的16执行源，分析工具也另存哈希。新8人固定排除前40位、0重合，能力档位及并列评分的执行前修订均保存原稿，尚待本批外发同意。具体记录与CLI见[alpha.11说明](context-20261031.md)。

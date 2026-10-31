@@ -173,6 +173,7 @@ class TrialSafetyTests(unittest.TestCase):
             'reasoning_effort':'low','revision_policy':'provider_alias_exploratory','max_input_characters':40000,'max_output_characters':16000,
             'reported_output_token_guard':4000,'concurrency':1,'automatic_retries':0,'execution_order':'paired_interleaved_v1',
             'adapter_instructions':'synthetic-only','response_protocol':'typed-source-v2','output_schema_sha256':vw.digest(typed.schema())}
+        config['transport']['execution_sources_sha256']={'record_selection.py':hashlib.sha256((Path(au.__file__).parent/'record_selection.py').read_bytes()).hexdigest()}
         root=self.fixture.root/'typed-plan';root.mkdir();run_dir=root/'run';config_file=root/'config.json';config_file.write_text(json.dumps(config))
         new_inputs=root/'inputs';fixture_module.vp.reframe(self.fixture.inputs,new_inputs)
         review=au.read_object(self.fixture.review_file);review['inputs_manifest_sha256']=vw.digest(au.read_object(new_inputs/'manifest.json'))

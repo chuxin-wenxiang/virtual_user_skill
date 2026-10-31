@@ -27,16 +27,19 @@ class PlanReviewTests(unittest.TestCase):
   self.lifecycle(False,"atomic-bound-v4",source_protocol=scope.NAME)
  def test_scope_contract_failure_remains_pending(self):
   self.lifecycle(False,"atomic-bound-v4",source_protocol=scope.NAME,clause_invalid=True)
- def lifecycle(self,invalid,protocol_name="field-bound-v3",review_invalid=False,batch_invalid=False,source_protocol=None,clause_invalid=False):
+ def test_single_memory_design_complete_mocked_generation_and_source_audit(self):
+  self.lifecycle(False,'atomic-bound-v4',source_protocol=scope.NAME,comparison_kind=fm.vp.MEMORY_COMPARISON)
+ def lifecycle(self,invalid,protocol_name="field-bound-v3",review_invalid=False,batch_invalid=False,source_protocol=None,clause_invalid=False,comparison_kind=fm.vp.TAG_COMPARISON):
   f=fm.ValidationWorkflowTests();f.setUp()
   try:
    root=f.root/'review-plan';root.mkdir();inputs=root/'inputs'
-   if protocol_name=='atomic-bound-v4':fm.vp.build(f.fixture.profiles,inputs,root/'new-judge',per_group=1,repeats=2,response_protocol=protocol_name)
+   if protocol_name=='atomic-bound-v4':fm.vp.build(f.fixture.profiles,inputs,root/'new-judge',per_group=1,repeats=2,response_protocol=protocol_name,comparison_kind=comparison_kind)
    else:fm.vp.reframe(f.inputs,inputs)
    manifest=au.read_object(inputs/'manifest.json');protocol=au.read_object(inputs/'protocol.json');protocol['response_protocol']=protocol_name;manifest['protocol_sha256']=vw.digest(protocol)
    (inputs/'protocol.json').write_text(json.dumps(protocol));(inputs/'manifest.json').write_text(json.dumps(manifest))
    config=copy.deepcopy(f.config);config.update(provider='openai-chatgpt-plan',model='synthetic-plan-model',revision='provider-alias:synthetic',synthetic=False,parameters={'temperature':None,'top_p':None,'max_output_tokens':None})
    config['transport']={'route':cp.API+'/responses','store':False,'stream':True,'billing_policy':'subscription_only_no_paid_fallback','reasoning_effort':'low','revision_policy':'provider_alias_exploratory','max_input_characters':40000,'max_output_characters':16000,'reported_output_token_guard':4000,'concurrency':1,'automatic_retries':0,'execution_order':'paired_interleaved_v1','adapter_instructions':'synthetic','response_protocol':protocol_name,'output_schema_sha256':vw.digest(atomic.schema() if protocol_name=='atomic-bound-v4' else ap.schema()),'execution_sources_sha256':{}}
+   config['transport']['execution_sources_sha256']['record_selection.py']=hashlib.sha256((Path(au.__file__).parent/'record_selection.py').read_bytes()).hexdigest()
    if source_protocol:
     config['transport']['source_review_protocol']=source_protocol
     config['transport']['source_review_model']='synthetic-review-model'

@@ -86,6 +86,12 @@ def audit_inputs(input_dir):
             "Expected the four frozen validation questions")
     repeat_count = protocol.get("repeats_per_question_condition")
     require(type(repeat_count) is int and 1 <= repeat_count <= 5, "Invalid repeat count")
+    comparison = protocol.get('comparison_kind', vp.TAG_COMPARISON)
+    require(comparison in (vp.TAG_COMPARISON, vp.MEMORY_COMPARISON), 'Unsupported comparison design')
+    if protocol.get('record_selection_policy') is not None:
+        import record_selection as rs
+        require(protocol['record_selection_policy'] in rs.POLICIES, 'Unsupported frozen selection policy')
+    conditions = ('M',) if comparison == vp.MEMORY_COMPARISON else ('X', 'Y')
     files = manifest.get("inputs")
     require(isinstance(files, list) and bool(files), "Input manifest has no prompt files")
     prompts = {}
@@ -98,6 +104,8 @@ def audit_inputs(input_dir):
         text = raw.decode("utf-8")
         header, payload = decode_prompt(text)
         require(text_digest(header) == manifest.get("shared_instructions_sha256"), "Shared instructions changed")
+        if protocol.get('record_selection_policy') is not None:
+            require(payload['user_context'].get('record_selection_policy') == protocol['record_selection_policy'], 'Prompt selection policy differs from frozen design')
         if protocol.get("response_protocol") == "atomic-bound-v4":
             require(payload["user_context"].get("source_catalogue") == sr.catalogue(payload["user_context"]["evidence"]), "Derived source catalogue differs from visible evidence")
         if protocol.get('source_map_protocol') is not None:
@@ -115,7 +123,7 @@ def audit_inputs(input_dir):
         require(isinstance(call, dict), "Invalid call record")
         case, condition, qid, repeat = (call.get(k) for k in ("case", "condition", "question_id", "run"))
         require(isinstance(case, str) and re.fullmatch(r"S\d{3,}", case), "Invalid case ID")
-        require(condition in ("X", "Y") and qid in ("Q1", "Q2", "Q3", "Q4"), "Invalid condition or question")
+        require(condition in conditions and qid in ("Q1", "Q2", "Q3", "Q4"), "Invalid condition or question")
         require(type(repeat) is int and 1 <= repeat <= repeat_count, "Invalid repeat index")
         expected = f"{case}/{condition}/{qid}.txt"
         require(call.get("prompt") == expected and expected in prompts, "Call references an unexpected prompt")
@@ -129,10 +137,15 @@ def audit_inputs(input_dir):
         cases.add(case)
         calls.append(call)
     require(len(cases) == manifest.get("users"), "User count mismatch")
-    require(len(calls) == manifest.get("planned_calls") == len(cases) * 8 * repeat_count, "Incomplete call grid")
-    require(len(prompts) == len(cases) * 8, "Incomplete prompt grid")
+    require(len(calls) == manifest.get("planned_calls") == len(cases) * len(conditions) * 4 * repeat_count, "Incomplete call grid")
+    require(len(prompts) == len(cases) * len(conditions) * 4, "Incomplete prompt grid")
     for case in cases:
         for qid in protocol["questions"]:
+            if comparison == vp.MEMORY_COMPARISON:
+                rows = prompts[f'{case}/M/{qid}.txt']['payload']['user_context']['evidence']
+                require(rows and all(r.get('kind') in ('survey', 'verbatim') for r in rows), 'Memory-only design requires dated source records')
+                require(prompts[f'{case}/M/{qid}.txt']['payload']['user_context'].get('capability') == au.summarize(rows)[0], 'Memory capability differs from selected evidence')
+                continue
             left = prompts[f"{case}/X/{qid}.txt"]["payload"]
             right = prompts[f"{case}/Y/{qid}.txt"]["payload"]
             require(left["question"] == right["question"], "Conditions have different questions")
@@ -210,6 +223,9 @@ def templates(input_dir, output_dir):
 def freeze(input_dir, config_file, review_file, output_dir):
     root, manifest, protocol, calls, _ = audit_inputs(input_dir)
     config, review = model_config(au.read_object(config_file)), au.read_object(review_file)
+    if config['provider'] == 'openai-chatgpt-plan' and protocol.get('record_selection_policy') == 'question_recent_context_v1':
+        source_file = Path(__file__).parent/'record_selection.py'
+        require(config['transport'].get('execution_sources_sha256', {}).get('record_selection.py') == hashlib.sha256(source_file.read_bytes()).hexdigest(), 'New selection policy requires its frozen execution source')
     require(protocol.get("response_protocol", "legacy-v1") == config.get("transport", {}).get("response_protocol", "legacy-v1"), "Frozen response protocol differs from input instructions")
     if config["seed_policy"] == "same_repeat_schedule":
         require(len(config["repeat_seeds"]) == max(c["run"] for c in calls), "Seed schedule must cover each repeat exactly")
@@ -225,6 +241,7 @@ def freeze(input_dir, config_file, review_file, output_dir):
                 "Record which parts of the unknown question lack visible evidence")
     directory = new_dir(output_dir)
     run = {"schema_version": 1, "skill_version": au.VERSION, "input_dir": str(root),
+           "comparison_kind": protocol.get('comparison_kind', vp.TAG_COMPARISON),
            "inputs_manifest_sha256": digest(manifest), "model_config": config,
            "model_config_sha256": digest(config), "visible_review": review,
            "initial_status": "frozen_waiting_for_imports", "calls": calls,
@@ -242,19 +259,23 @@ def load_run(run_dir):
     require(run.get("run_sha256") == digest({k: v for k, v in run.items() if k != "run_sha256"}), "Frozen run checksum mismatch")
     model_config(run["model_config"])
     require(digest(run["model_config"]) == run.get("model_config_sha256"), "Frozen model config mismatch")
-    _, manifest, _, calls, prompts = audit_inputs(run["input_dir"])
+    _, manifest, protocol, calls, prompts = audit_inputs(run["input_dir"])
+    require(run.get('comparison_kind', vp.TAG_COMPARISON) == protocol.get('comparison_kind', vp.TAG_COMPARISON), 'Frozen comparison design changed')
     require(digest(manifest) == run.get("inputs_manifest_sha256") and calls == run.get("calls"), "Frozen inputs changed")
     return directory, run, {call_id(c): c for c in calls}, prompts
 
 
-def check_common_answer(payload, answer):
+def check_common_answer(payload, answer, response_protocol=None):
     require(isinstance(answer, dict), "Response answer must be an object")
+    expected_version = {'typed-source-v2':2,'field-bound-v3':3,'atomic-bound-v4':4}.get(response_protocol)
+    if expected_version is not None:
+        require(answer.get('protocol_version') == expected_version, 'Answer protocol differs from frozen response protocol')
     require(isinstance(answer.get("answer"), str) and answer["answer"].strip(), "Answer text is required")
     require(answer.get("direction") in ("promoter", "passive", "detractor", "unknown"), "Invalid attitude direction")
     if answer.get("protocol_version") in (2,3,4):
         try:
             renderer = atomic if answer.get("protocol_version")==4 else field_typed if answer.get("protocol_version")==3 else typed
-            expected = renderer.render(payload["user_context"]["evidence"], answer.get("wire_answer"))
+            expected = renderer.render(payload["user_context"]["evidence"], answer.get("wire_answer"),payload['user_context'].get('capability',{}).get('level'))
         except typed.ProtocolError as exc:
             raise au.InputError(str(exc)) from exc
         require(answer == expected, "Rendered answer differs from original typed wire answer")
@@ -297,7 +318,7 @@ def validate_response(run, calls, prompts, response, *, check_answer=True):
     for field, limit in (("input_tokens", config["input_token_limit"]), ("output_tokens", output_limit)):
         require(type(usage.get(field)) is int and 0 <= usage[field] <= limit, "Reported token usage violates frozen limits")
     if check_answer:
-        check_common_answer(prompts[call["prompt"]]["payload"], response.get("answer"))
+        check_common_answer(prompts[call["prompt"]]["payload"], response.get("answer"), config.get('transport', {}).get('response_protocol'))
     return key
 
 
@@ -328,7 +349,7 @@ def raw_responses_for(source, run, calls, prompts):
         require(path.name == f"{key}.json" and key not in responses, "Duplicate/misnamed raw response")
         require(isinstance(response.get("answer"), dict), "Raw JSON answer object required")
         try:
-            check_common_answer(prompts[calls[key]["prompt"]]["payload"], response["answer"])
+            check_common_answer(prompts[calls[key]["prompt"]]["payload"], response["answer"], run['model_config'].get('transport', {}).get('response_protocol'))
         except au.InputError as exc:
             failures[key] = str(exc)
         responses[key] = response
@@ -358,20 +379,21 @@ def load_judges(judge_dir, run):
         obj = au.read_object(path)
         require(isinstance(obj.get("case"), str) and obj["case"] not in result, "Duplicate judge case")
         mapping = obj.get("condition_map")
-        require(isinstance(mapping, dict) and set(mapping) == {"X", "Y"} and
-                set(mapping.values()) == {"historical_tag_baseline", "individual_memory"}, "Invalid hidden condition map")
+        expected_mapping = {'M': 'individual_memory'} if run.get('comparison_kind', vp.TAG_COMPARISON) == vp.MEMORY_COMPARISON else None
+        require(isinstance(mapping, dict) and (mapping == expected_mapping if expected_mapping is not None else
+                set(mapping) == {'X', 'Y'} and set(mapping.values()) == {'historical_tag_baseline', 'individual_memory'}), 'Invalid hidden condition map')
         result[obj["case"]] = obj
     require(set(result) == {c["case"] for c in run["calls"]}, "Judge cases do not match frozen inputs")
     return root, result
 
 
 def audit(input_dir, judge_dir=None):
-    _, manifest, _, calls, prompts = audit_inputs(input_dir)
+    _, manifest, protocol, calls, prompts = audit_inputs(input_dir)
     result = {"ok": True, "users": manifest["users"], "prompts": manifest["unique_prompts"],
               "planned_calls": len(calls), "model_calls_performed": 0,
               "scope": "Checksums, grid, shared instructions and matched tag sources; no semantic efficacy check"}
     if judge_dir:
-        _, judges = load_judges(judge_dir, {"inputs_manifest_sha256": digest(manifest), "calls": calls})
+        _, judges = load_judges(judge_dir, {"inputs_manifest_sha256": digest(manifest), "calls": calls, 'comparison_kind': protocol.get('comparison_kind', vp.TAG_COMPARISON)})
         for case, hidden in judges.items():
             boundary = au.date_value(hidden["cutoff_exclusive"])
             require(au.date_value(hidden["holdout"]["date"]) == boundary, "Hidden record does not match its cutoff")
@@ -458,6 +480,14 @@ def paired_summary(values):
             "memory_mean": sum(b for _, b in pairs) / len(pairs),
             "difference_pp": sum(differences) / len(differences), "ci95_pp": [samples[24], samples[974]]}
 
+def single_memory_summary(values):
+    means = [sum(v)/len(v) for (case, condition), v in sorted(values.items()) if condition == 'individual_memory' and v]
+    if not means:
+        return {'users': 0, 'mean': None, 'ci95': None, 'design': 'single_memory_arm'}
+    rng = random.Random(20261026)
+    samples = sorted(sum(rng.choice(means) for _ in means)/len(means) for _ in range(1000))
+    return {'users': len(means), 'mean': sum(means)/len(means), 'ci95': [samples[24], samples[974]], 'design': 'single_memory_arm'}
+
 
 def summarize(run_dir, scores_file):
     directory, run, calls, prompts = load_run(run_dir)
@@ -525,14 +555,16 @@ def summarize(run_dir, scores_file):
         meta = key["reviews"][expected[identity]["review_ids"][0]]
         repeat_values.setdefault((meta["case"], meta["condition"]), []).append(value)
     missing += len(set(expected) - repeat_seen)
-    metrics = {name: paired_summary(value) for name, value in graded.items()}
-    metrics["repeat_consistency"] = paired_summary(repeat_values)
+    aggregate = single_memory_summary if run.get('comparison_kind') == vp.MEMORY_COMPARISON else paired_summary
+    metrics = {name: aggregate(value) for name, value in graded.items()}
+    metrics["repeat_consistency"] = aggregate(repeat_values)
     return {"status": "partial_scores" if missing else "scored_exploratory", "unscored_items": missing,
             "metrics": metrics, "score_origin": scores["origin"], "synthetic_present": pack["synthetic_present"],
             "provider_verified": False, "automatic_model_calls": 0,
             "answer_contract_failures": len(key.get("mechanical_failures", {})),
             "reviewed_answers": len(responses),
-            "interpretation": "User-paired exploratory summary; lower fabrication rate is better; no automatic efficacy verdict"}
+            'comparison_kind': run.get('comparison_kind', vp.TAG_COMPARISON),
+            "interpretation": "Single-memory descriptive summary; use separate Q2 computed-baseline report" if run.get('comparison_kind') == vp.MEMORY_COMPARISON else "User-paired exploratory summary; lower fabrication rate is better; no automatic efficacy verdict"}
 
 
 def main():

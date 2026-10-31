@@ -1,6 +1,6 @@
 # v2027：GitHub 同类项目审阅与升级建议
 
-审阅日期：2026-10-31（Asia/Shanghai）。对应当前发布版：[v2027.0.0-alpha.9](https://github.com/chuxin-wenxiang/virtual_user_skill/releases/tag/v2027.0.0-alpha.9)。本文是公开代码、作者论文与方法的比较，以及升级方案与后续实现范围；没有运行这些项目，也没有新增模型请求、购买服务或复制第三方代码。
+审阅日期：2026-10-31（Asia/Shanghai）。对应调研时发布版：[v2027.0.0-alpha.9](https://github.com/chuxin-wenxiang/virtual_user_skill/releases/tag/v2027.0.0-alpha.9)。本文是公开代码、作者论文与方法的比较，以及升级方案与后续实现范围；没有运行这些项目，也没有新增模型请求、购买服务或复制第三方代码。
 
 最值得借鉴的是 Stanford 的真人个体代理验证方法、TinyTroupe 的实验与验证分层，以及 τ-bench 的场景约束和可核验任务。它们分别改善“凭什么代表这个人”“怎样证明有效”和“怎样限制越界回答”。没有找到足以证明其在我们的稀疏历史 NPS 任务上更有效的同条件结果；项目知名度、自然对话和群体分布相似都不能替代这种证据。
 
@@ -50,7 +50,7 @@ v2027 已有 `select_records()`，按词项重合、日期等确定性规则选�
 
 ## 建议的下一轮顺序与验收
 
-下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。记录检索排序、独立评分和新用户效果验证尚未升级；原alpha.9结果不改写，不能将局部工程实现视为整张清单已完成。
+下表保留最初的升级方案。后续alpha.10已实现同记录字段映射、只读中断清单和Q2事后基线计算，详见[离线改进记录](../skills/authentic-user-v2027/references/offline-20261031-evidence-map.md)。alpha.11进一步实现问题锚点与最近背景检索、并列评分消歧及单记忆臂网格，见[实现与准备状态](../skills/authentic-user-v2027/references/context-20261031.md)。独立人工评分和新用户效果验证仍未完成；原alpha.9结果不改写，不能将工程实现视为整张清单已验证有效。
 
 | 优先级 | 实际改动 | 验收与限制 | 模型/费用影响 |
 |---|---|---|---|

@@ -12,6 +12,9 @@ import sys
 
 import authentic_user as au
 
+TAG_COMPARISON = 'historical_tags_vs_memory'
+MEMORY_COMPARISON = 'memory_vs_computed_baselines'
+
 PROTOCOL = {
     "protocol_version": "historical-tags-v1",
     "purpose": "Compare dated historical tags with individual memory; not a reproduction of old production agents",
@@ -202,7 +205,15 @@ def baseline_tags(memory):
             for index, ((industry, tag), count) in enumerate(sorted(counts.items()), 1)]
 
 
-def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False, excluded_ids=None, fresh_holdout=False, response_protocol=None):
+def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False, excluded_ids=None, fresh_holdout=False, response_protocol=None,
+          comparison_kind=TAG_COMPARISON, selection_policy='question_recent_context_v1', max_records=100, max_chars=40000):
+    import record_selection as rs
+    if comparison_kind not in (TAG_COMPARISON, MEMORY_COMPARISON) or selection_policy not in rs.POLICIES:
+        raise au.InputError('Unsupported comparison or selection policy')
+    if comparison_kind == MEMORY_COMPARISON and response_protocol != 'atomic-bound-v4':
+        raise au.InputError('Single-memory validation requires atomic-bound-v4')
+    if not (type(per_group) is int and 1 <= per_group <= 8 and type(max_records) is int and 1 <= max_records <= 100 and type(max_chars) is int and 500 <= max_chars <= 200000):
+        raise au.InputError('Invalid sample size or evidence limits')
     if response_protocol not in (None, "field-bound-v3", "atomic-bound-v4"):
         raise au.InputError("Unsupported preparation response protocol")
     if type(repeats) is not int or not 1 <= repeats <= 5:
@@ -213,6 +224,8 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
     if inputs.exists() or judges.exists():
         raise au.InputError("Validation output directories already exist; choose new directories")
     protocol = dict(PROTOCOL)
+    protocol.update(comparison_kind=comparison_kind, record_selection_policy=selection_policy,
+                    evidence_max_records=max_records, evidence_max_chars=max_chars)
     shared=SHARED_INSTRUCTIONS
     if fresh_holdout:
         import attribution_protocol as field_typed
@@ -229,6 +242,11 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
                         target_factor_screen="explicit lexical topic beyond generic praise; not semantic certification")
     protocol["pilot_excludes_zero"] = not include_zero
     protocol["repeats_per_question_condition"] = repeats
+    if comparison_kind == MEMORY_COMPARISON:
+        protocol.update(purpose='Single individual-memory arm against deterministic visible-history Q2 baselines; no model-generated tag arm',
+                        scoring='User-level descriptive scores and paired Q2 comparison with computed baselines; missing, invalid and abstained responses stay in the planned denominator',
+                        computed_attitude_baselines=['last_same_industry', 'constant_promoter', 'constant_passive', 'constant_detractor'],
+                        persistence_ties='Latest same-industry survey timestamp; conflicting scores abstain; zero valid; no verbatim double count')
     # Freeze question/scoring content before any holdout material is inspected.
     protocol_sha = digest(protocol)
     candidates, summary = scan(root, include_zero, excluded_ids, fresh_holdout)
@@ -249,17 +267,20 @@ def build(root, input_dir, judge_dir, per_group=2, repeats=2, include_zero=False
         case = f"S{number:03d}"
         # The condition mapping is held by the judge and is absent from generation inputs.
         labels = ("X", "Y") if int(digest({"case": case})[:2], 16) % 2 else ("Y", "X")
-        condition_map = {labels[0]: "historical_tag_baseline", labels[1]: "individual_memory"}
+        condition_map = {'M': 'individual_memory'} if comparison_kind == MEMORY_COMPARISON else {labels[0]: "historical_tag_baseline", labels[1]: "individual_memory"}
         for qid, template in protocol["questions"].items():
             question = template.format(industry=au.INDUSTRIES[candidate["industry"]])
             memory = au.prepare(root, candidate["buyer_id"], question, cutoff=candidate["cutoff"],
-                                industry=candidate["industry"], max_records=100, max_chars=40000)
+                                industry=candidate["industry"], max_records=max_records, max_chars=max_chars, selection_policy=selection_policy)
             # Pilot zero exclusion applies equally to both conditions and is not a runtime policy.
             evidence = [r for r in memory["evidence"] if include_zero or r["score"] != 0]
             tags = baseline_tags(evidence)
-            for label, data in ((labels[0], tags), (labels[1], evidence)):
+            conditions = [('M', evidence)] if comparison_kind == MEMORY_COMPARISON else [(labels[0], tags), (labels[1], evidence)]
+            for label, data in conditions:
                 payload = {"subject_alias": case, "question_id": qid, "question": question,
-                           "user_context": {"evidence": data}}
+                           "user_context": {"evidence": data, 'record_selection_policy': selection_policy}}
+                if comparison_kind == MEMORY_COMPARISON:
+                    payload['user_context']['capability'] = au.summarize(data)[0]
                 if response_protocol == "atomic-bound-v4":
                     import source_registry as sr
                     payload["user_context"]["source_catalogue"] = sr.catalogue(data)
@@ -339,6 +360,11 @@ def main():
     parser.add_argument("--source-input-dir")
     parser.add_argument("--per-group", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=2)
+    parser.add_argument('--comparison', choices=(TAG_COMPARISON, MEMORY_COMPARISON), default=TAG_COMPARISON)
+    parser.add_argument('--response-protocol', choices=('field-bound-v3', 'atomic-bound-v4'))
+    parser.add_argument('--selection-policy', choices=('question_recent_context_v1', 'question_token_overlap_then_recency'), default='question_recent_context_v1')
+    parser.add_argument('--max-records', type=int, default=100)
+    parser.add_argument('--max-chars', type=int, default=40000)
     args = parser.parse_args()
     try:
         if args.command == "reframe":
@@ -354,7 +380,9 @@ def main():
         else:
             if not args.input_dir or not args.judge_dir:
                 raise au.InputError("build requires --input-dir and --judge-dir")
-            result = build(root, args.input_dir, args.judge_dir, args.per_group, args.repeats, args.include_zero)
+            result = build(root, args.input_dir, args.judge_dir, args.per_group, args.repeats, args.include_zero,
+                           response_protocol=args.response_protocol, comparison_kind=args.comparison,
+                           selection_policy=args.selection_policy, max_records=args.max_records, max_chars=args.max_chars)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (au.InputError, OSError) as exc:

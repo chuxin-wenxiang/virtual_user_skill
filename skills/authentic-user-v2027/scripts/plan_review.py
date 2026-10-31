@@ -70,7 +70,7 @@ def phase_sources(run,phase_config=None):
         vw.require(hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()==value,'Source changed outside phase freeze')
     return expected
 
-def precheck(evidence, wire):
+def precheck(evidence, wire, level=None):
     """Withdraw invalid atoms, never rewrite text or hide the original strict failure."""
     import copy
     p = atomic_protocol
@@ -80,22 +80,22 @@ def precheck(evidence, wire):
     base = copy.deepcopy(wire)
     base.update(facts=[], atoms=[], direction='unknown', direction_atom=None)
     if not base['unknowns']: base['unknowns'] = ['review_withdrawal']
-    p.validate(evidence, base)
+    p.validate(evidence, base, level)
     facts = []; atoms = []; kept = []
     log = {'kept_atom_indices': kept, 'fact_errors': [], 'atom_errors': [], 'direction_errors': []}
     try:
-        p.validate(evidence, wire); log['original_strict_contract_pass'] = True
+        p.validate(evidence, wire, level); log['original_strict_contract_pass'] = True
     except p.ProtocolError as exc:
         log.update(original_strict_contract_pass=False, original_strict_error=str(exc))
     for i, fact in enumerate(wire['facts']):
         try:
             p.require(fact not in facts, 'Duplicate fact selector')
-            p.validate(evidence, base | {'facts': [fact]})
+            p.validate(evidence, base | {'facts': [fact]}, level)
             facts.append(fact)
         except p.ProtocolError as exc: log['fact_errors'].append({'fact_index':i, 'error':str(exc)})
     for i, atom in enumerate(wire['atoms']):
         try:
-            p.validate(evidence, base | {'atoms': [atom]})
+            p.validate(evidence, base | {'atoms': [atom]}, level)
             atoms.append(atom); kept.append(i)
         except p.ProtocolError as exc: log['atom_errors'].append({'atom_index':i, 'error':str(exc)})
     out = copy.deepcopy(wire); out.update(facts=facts, atoms=atoms, direction='unknown', direction_atom=None)
@@ -104,13 +104,13 @@ def precheck(evidence, wire):
         try:
             p.require(type(index) is int and index in kept, 'Direction depends on an absent or rejected atom')
             out.update(direction=wire['direction'], direction_atom=kept.index(index))
-            p.validate(evidence, out)
+            p.validate(evidence, out, level)
         except p.ProtocolError as exc:
             log['direction_errors'].append(str(exc)); out.update(direction='unknown', direction_atom=None)
     elif index is not None: log['direction_errors'].append('Unknown direction has an unused binding')
     if any(log[k] for k in ('fact_errors','atom_errors','direction_errors')):
         out['unknowns'] = [x for x in out['unknowns'] if x != 'review_withdrawal'][:5] + ['review_withdrawal']
-    p.validate(evidence, out)
+    p.validate(evidence, out, level)
     return out, log
 
 
@@ -118,7 +118,7 @@ def precheck_bundle(bundle, answer):
     au.validate_bundle(bundle)
     vw.require(answer.get('bundle_sha256') == bundle['bundle_sha256'], 'Precheck answer belongs to another bundle')
     wire = answer.get('wire_answer')
-    filtered, log = precheck(bundle['evidence'], wire)
+    filtered, log = precheck(bundle['evidence'], wire, bundle['capability']['level'])
     rendered = au.render_bound_answer(bundle, {'bundle_sha256':bundle['bundle_sha256'], 'answer_mode':answer.get('answer_mode'), 'wire_answer':filtered})
     return rendered, {'origin':'deterministic_precheck_withdrawal', 'bundle_sha256':bundle['bundle_sha256'], 'original_wire_sha256':ar.digest(wire), 'filtered_wire_sha256':ar.digest(filtered), 'precheck':log}
 
@@ -131,7 +131,7 @@ def candidates(root,calls,prompts,run):
         envelope=au.read_object(root/'incoming'/(cid+'.json'));wire=envelope['answer']['wire_answer'];payload=prompts[calls[cid]['prompt']]['payload']
         try:
             if ap is atomic_protocol:
-                candidate, log = precheck(payload['user_context']['evidence'], wire)
+                candidate, log = precheck(payload['user_context']['evidence'], wire, payload['user_context'].get('capability',{}).get('level'))
                 task=ar.task(payload['user_context']['evidence'],candidate)
                 task.update(original_wire_sha256=ar.digest(wire), precheck=log)
             else:task=ar.task(payload['user_context']['evidence'],wire)
@@ -240,7 +240,7 @@ def audit(run_dir):
             cid=key[task['review_id']]['call_id'];source=au.read_object(root/'incoming'/(cid+'.json'))['answer']['wire_answer'];evidence=prompts[calls[cid]['prompt']]['payload']['user_context']['evidence']
             candidate = source
             if ap is atomic_protocol:
-                candidate, log = precheck(evidence, source)
+                candidate, log = precheck(evidence, source, prompts[calls[cid]['prompt']]['payload']['user_context'].get('capability',{}).get('level'))
                 vw.require(task['original_wire_sha256']==ar.digest(source) and task['precheck']==log, 'Precheck differs from original strict candidate')
             vw.require(task['candidate']==candidate and task['evidence']==evidence and task['wire_sha256']==ar.digest(candidate) and task['evidence_sha256']==ar.digest(evidence),'Review task differs from original or deterministic withdrawal')
             assessment={k:v for k,v in by_id[task['review_id']].items() if k!='review_id'}

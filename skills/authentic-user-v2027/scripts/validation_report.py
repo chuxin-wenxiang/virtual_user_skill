@@ -151,11 +151,11 @@ def persistence(evidence, industry, cutoff):
     return vp.segment(next(iter(scores))) if len(scores) == 1 else 'unknown'
 
 
-def direction_result(payload, answer):
+def direction_result(payload, answer, response_protocol=None):
     if answer is None:
         return 'missing', 'unknown'
     try:
-        vw.check_common_answer(payload, answer)
+        vw.check_common_answer(payload, answer, response_protocol)
     except au.InputError:
         return 'invalid', 'unknown'
     direction = answer['direction']
@@ -183,7 +183,7 @@ def attitude(run_dir, judge_dir, phase='original', *, model_phases_ended=False):
     directory, run, calls, prompts = vw.load_run(run_dir)
     vw.require(not (directory/'.plan-trial.lock').exists() and not (directory.parent/'source-review/.lock').exists(), 'Active or stale model lock must be resolved before outcome analysis')
     _, judges = vw.load_judges(judge_dir, run)
-    rows = {'individual_memory': [], 'historical_tag_baseline': []}
+    rows = {'individual_memory': []} if run.get('comparison_kind') == vp.MEMORY_COMPARISON else {'individual_memory': [], 'historical_tag_baseline': []}
     baselines = {name: [] for name in ('last_same_industry', 'constant_promoter', 'constant_passive', 'constant_detractor')}
     root = directory.parent
     for cid, call in calls.items():
@@ -207,7 +207,7 @@ def attitude(run_dir, judge_dir, phase='original', *, model_phases_ended=False):
             else:
                 vw.require(envelope.get('call_id') == cid and envelope.get('origin') == 'derived_source_review', 'Unexpected final answer binding')
             answer = envelope.get('answer')
-        state, direction = ('invalid', 'unknown') if path.exists() and answer is None else direction_result(payload, answer)
+        state, direction = ('invalid', 'unknown') if path.exists() and answer is None else direction_result(payload, answer, run['model_config'].get('transport', {}).get('response_protocol'))
         condition = hidden['condition_map'][call['condition']]
         rows[condition].append({'case': case, 'state': state, 'hit': int(state == 'classified' and direction == target)})
         if condition == 'individual_memory':

@@ -14,8 +14,8 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.10"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", VERSION}
+VERSION = "2027.0.0-alpha.11"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -188,7 +188,7 @@ def select_records(records, question, max_records, max_chars):
     return selected
 
 
-def summarize(records, substantive_only=True):
+def summarize(records, substantive_only=True, resolve_score_ties=False):
     surveys = [r for r in records if r["kind"] == "survey"]
     from claim_protocol import meaningful
     quotes = [r for r in records if r["kind"] == "verbatim" and (not substantive_only or meaningful(r.get("text")))]
@@ -215,6 +215,10 @@ def summarize(records, substantive_only=True):
         "latest_score": scored[-1]["score"] if scored else None,
         "last_evidence_date": records[-1]["date"] if records else None,
     }
+    if scored and resolve_score_ties:
+        for field, edge in (('first_score', scored[0]), ('latest_score', scored[-1])):
+            values = {r['score'] for r in scored if date_value(r['date']) == date_value(edge['date'])}
+            summary[field] = next(iter(values)) if len(values) == 1 else None
     return result, summary
 
 
@@ -223,7 +227,11 @@ def bundle_digest(bundle):
                                     if k != "bundle_sha256"}).encode()).hexdigest()
 
 
-def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24, max_chars=40000):
+def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24, max_chars=40000,
+            selection_policy='question_recent_context_v1'):
+    import record_selection as rs
+    if selection_policy not in rs.POLICIES:
+        raise InputError('Unsupported record selection policy')
     if not isinstance(question, str) or not question.strip() or len(question) > 4000:
         raise InputError("Question must contain 1–4000 characters")
     if isinstance(buyer_id, int) and not isinstance(buyer_id, bool):
@@ -236,15 +244,18 @@ def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24
     boundary = date_value(cutoff) if cutoff else None
     archive, tier = load_archive(root, buyer_id)
     records = records_from(archive, boundary, industry)
-    evidence = select_records(records, question, max_records, max_chars)
-    capability, summary = summarize(evidence)
+    if selection_policy == rs.NAME:
+        evidence, selection_audit = rs.select(records, question, max_records, max_chars)
+    else:
+        evidence, selection_audit = select_records(records, question, max_records, max_chars), None
+    capability, summary = summarize(evidence, resolve_score_ties=True)
     result = {
         "schema_version": 1, "skill_version": VERSION, "validation_status": "experimental_unvalidated",
         "subject_alias": "user-" + hashlib.sha256(buyer_id.encode()).hexdigest()[:12],
         "source_tier": tier, "question": question.strip(),
         "cutoff_exclusive": boundary.isoformat() if boundary else None,
         "industry_filter": industry, "capability": capability, "derived_summary": summary,
-        "selection": {"method": "question_token_overlap_then_recency", "max_records": max_records,
+        "selection": {"method": selection_policy, "max_records": max_records,
                       "max_evidence_chars": max_chars, "visible_records_available": len(records)},
         "boundaries": [
             "Demographics and full-history L2 summaries, L3 and L4 are excluded.",
@@ -255,6 +266,8 @@ def prepare(root, buyer_id, question, cutoff=None, industry=None, max_records=24
         ],
         "evidence": evidence,
     }
+    if selection_audit is not None:
+        result['selection']['context_audit'] = selection_audit
     import source_registry as sr
     result['source_map'] = sr.record_map(evidence)
     result["bundle_sha256"] = bundle_digest(result)
@@ -336,10 +349,40 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", VERSION))
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", VERSION), resolve_score_ties=bundle['skill_version']==VERSION)
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
-    if bundle['skill_version'] == VERSION or 'source_map' in bundle:
+    if bundle['skill_version'] == VERSION:
+        import record_selection as rs
+        selection = bundle.get('selection', {})
+        if not isinstance(selection, dict) or selection.get('method') not in rs.POLICIES:
+            raise InputError('Invalid selection policy')
+        limits = selection.get('max_records'), selection.get('max_evidence_chars')
+        cost = sum(len(canonical({k: v for k, v in row.items() if k != 'id'})) for row in evidence)
+        if not (type(limits[0]) is int and 1 <= limits[0] <= 100 and type(limits[1]) is int and 500 <= limits[1] <= 200000 and
+                len(evidence) <= limits[0] and cost <= limits[1] and type(selection.get('visible_records_available')) is int and selection['visible_records_available'] >= len(evidence)):
+            raise InputError('Selected records violate declared budget or counts')
+        if selection['method'] == rs.NAME:
+            audit = selection.get('context_audit', {})
+            if not isinstance(audit, dict) or audit.get('selected_records') != len(evidence) or audit.get('selected_record_chars') != cost:
+                raise InputError('Selection audit counts differ from selected records')
+            reservation = audit.get('latest_survey_context', {})
+            if not isinstance(reservation, dict) or reservation.get('status') not in ('selected', 'budget_excluded', 'no_eligible_survey', 'no_selected_anchor'):
+                raise InputError('Invalid recent survey context status')
+            refs = reservation.get('selected_evidence_ids')
+            if not isinstance(refs, list) or any(not isinstance(ref, str) or ref not in ids for ref in refs) or len(refs) != len(set(refs)):
+                raise InputError('Invalid recent survey context references')
+            chosen = [r for r in evidence if r['id'] in refs]
+            if reservation['status'] == 'selected':
+                if not chosen or any(r['kind'] != 'survey' or r['industry'] != reservation.get('industry') for r in chosen) or len({r['date'] for r in chosen}) != 1:
+                    raise InputError('Recent survey context does not refer to one same-industry timestamp')
+                visible_surveys = [r for r in evidence if r['kind'] == 'survey' and r['industry'] == reservation['industry']]
+                newest = max(date_value(r['date']) for r in visible_surveys)
+                if set(refs) != {r['id'] for r in visible_surveys if date_value(r['date']) == newest}:
+                    raise InputError('Recent context references do not cover the latest selected survey timestamp')
+            elif refs:
+                raise InputError('Unselected recent context cannot claim selected references')
+    if bundle['skill_version'] in ('2027.0.0-alpha.10', VERSION) or 'source_map' in bundle:
         import source_registry as sr
         if bundle.get('source_map') != sr.record_map(evidence):
             raise InputError('Source map does not match selected source records')
@@ -501,8 +544,8 @@ def write_new(path, text):
 
 
 def create_interview(root, buyer_id, question, output_dir, cutoff=None, industry=None,
-                     max_records=24, max_chars=40000):
-    bundle = prepare(root, buyer_id, question, cutoff, industry, max_records, max_chars)
+                     max_records=24, max_chars=40000, selection_policy='question_recent_context_v1'):
+    bundle = prepare(root, buyer_id, question, cutoff, industry, max_records, max_chars, selection_policy)
     prompt = render_prompt(bundle)
     directory = Path(output_dir).expanduser().resolve()
     directory.parent.mkdir(parents=True, exist_ok=True)
@@ -543,6 +586,7 @@ def parser():
         cmd.add_argument("--industry", choices=sorted(INDUSTRIES))
         cmd.add_argument("--max-records", type=int, default=24)
         cmd.add_argument("--max-chars", type=int, default=40000)
+        cmd.add_argument('--selection-policy', choices=('question_recent_context_v1', 'question_token_overlap_then_recency'), default='question_recent_context_v1')
         if name == "interview":
             cmd.add_argument("--output-dir", required=True)
         else:
@@ -575,12 +619,12 @@ def main(argv=None):
         if args.command == "interview":
             result = create_interview(resolve_root(args.profiles_dir), args.buyer_id, args.question,
                                       args.output_dir, args.cutoff, args.industry,
-                                      args.max_records, args.max_chars)
+                                      args.max_records, args.max_chars, args.selection_policy)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command in {"prepare", "inspect"}:
             bundle = prepare(resolve_root(args.profiles_dir), args.buyer_id, args.question,
-                             args.cutoff, args.industry, args.max_records, args.max_chars)
+                             args.cutoff, args.industry, args.max_records, args.max_chars, args.selection_policy)
             result = bundle if args.command == "prepare" else {
                 key: bundle[key] for key in ("skill_version", "validation_status", "subject_alias", "source_tier",
                                              "cutoff_exclusive", "capability", "derived_summary")}

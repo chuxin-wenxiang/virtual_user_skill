@@ -31,6 +31,8 @@ alpha.10增加record-fields-v1关联表，用同一来源记录的F编号帮助�
 
 这种拆分借鉴原子事实核查的研究思路（[FActScore](https://arxiv.org/abs/2305.14251)）与引用支持评估（[ALCE](https://arxiv.org/abs/2305.14627)），是本项目的工程适配，不声称复现论文指标。当前契约见 `scripts/atomic_protocol.py`，合成例见 [answer-atomic-demo.json](../examples/answer-atomic-demo.json)。
 
+alpha.11另增加问题锚点与最近背景的记录选择策略，但关联表本身不补引用。同一时点不同评分须并列，不能任意挑一个放进最近分数摘要；预算缺失与来源语义分开，不能据近期背景推断其与某条原话属于同一事件。方法见[检索说明](context-20261031.md)。
+
 ## 当前审核协议：scope-bound-v3
 
 在完整分句、前提、范围和推断检查之外，先区分historical_claim、topic_hypothesis、future_condition、future_consequence和evidence_boundary。历史断言须直接支持，纯未来条件不要求先有未来观测；改善或转为不自动证明原本有坏体验或既往推荐，仍/恢复等历史预设另核来源。涉及既有属性延续时不能把信号、网速等不同属性视为同一个。

@@ -40,7 +40,7 @@ def _execute(run_dir, credential_dir, consent_file):
                consent.get('subscription_only') is True and bool(consent.get('human_authorization')), 'Explicit run-bound data transmission consent required')
     transport = config['transport']
     sources=transport.get('execution_sources_sha256',{})
-    allowed_sources={'authentic_user.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py','attribution_protocol.py','attribution_review.py','plan_review.py','source_registry.py','atomic_protocol.py','atomic_review.py','clause_review.py','scope_review.py'}
+    allowed_sources={'authentic_user.py','record_selection.py','claim_protocol.py','chatgpt_plan.py','validation_prep.py','validation_workflow.py','plan_trial.py','trial_audit.py','attribution_protocol.py','attribution_review.py','plan_review.py','source_registry.py','atomic_protocol.py','atomic_review.py','clause_review.py','scope_review.py'}
     vw.require(isinstance(sources,dict) and set(sources)<=allowed_sources,'Invalid frozen source list')
     def check_sources():
         for name,expected in sources.items():
@@ -113,7 +113,8 @@ def _execute(run_dir, credential_dir, consent_file):
                 wire = envelope['answer']
                 try:
                     renderer=atomic if transport.get('response_protocol')=='atomic-bound-v4' else field_typed if transport.get('response_protocol')=='field-bound-v3' else typed
-                    envelope['answer'] = renderer.render(prompts[call['prompt']]['payload']['user_context']['evidence'], wire)
+                    context=prompts[call['prompt']]['payload']['user_context']
+                    envelope['answer'] = renderer.render(context['evidence'], wire, context.get('capability',{}).get('level'))
                 except typed.ProtocolError as exc:
                     envelope['answer'] = {'protocol_version':wire.get('protocol_version'),'wire_answer':wire}
                     envelope['render_error'] = str(exc)
