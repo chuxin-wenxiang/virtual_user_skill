@@ -1,7 +1,7 @@
 {
   "synthetic": true,
   "example_kind": "atomic_protocol_example_not_model_evaluation",
-  "bundle_sha256": "ef4b1146fb86a5872d1c974170658d80bd406aa49aa57a9fad315dfb28ecc117",
+  "bundle_sha256": "660bb3c10acf0d18aa2d8968fdf3ab15da2833ec62b29662eb33df296466397a",
   "answer_mode": "simulation",
   "wire_answer": {
     "protocol_version": 4,

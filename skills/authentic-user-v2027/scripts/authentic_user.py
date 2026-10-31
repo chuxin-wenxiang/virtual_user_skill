@@ -14,8 +14,9 @@ from pathlib import Path
 import re
 import sys
 
-VERSION = "2027.0.0-alpha.11"
-SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", VERSION}
+VERSION = "2027.0.0-alpha.12"
+SUPPORTED_BUNDLE_VERSIONS = {"2027.0.0-alpha.1", "2027.0.0-alpha.2", "2027.0.0-alpha.3", "2027.0.0-alpha.4", "2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", VERSION}
+CONTEXT_BUNDLE_VERSIONS = {"2027.0.0-alpha.11", VERSION}
 LOCAL_TZ = timezone(timedelta(hours=8))
 INDUSTRIES = {
     "airplane": "国内机票", "domestic_hotel": "国内酒店",
@@ -349,10 +350,10 @@ def validate_bundle(bundle):
             raise InputError("Evidence violates industry filter")
     if evidence != sorted(evidence, key=lambda row: (date_value(row["date"]), row["kind"], row["source_record_sha256"])):
         raise InputError("Evidence must be ordered chronologically")
-    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", VERSION), resolve_score_ties=bundle['skill_version']==VERSION)
+    capability, summary = summarize(evidence, bundle["skill_version"] in ("2027.0.0-alpha.5", "2027.0.0-alpha.6", "2027.0.0-alpha.7", "2027.0.0-alpha.8", "2027.0.0-alpha.9", "2027.0.0-alpha.10", "2027.0.0-alpha.11", VERSION), resolve_score_ties=bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS)
     if capability != bundle["capability"] or summary != bundle.get("derived_summary"):
         raise InputError("Derived fields do not match selected evidence")
-    if bundle['skill_version'] == VERSION:
+    if bundle['skill_version'] in CONTEXT_BUNDLE_VERSIONS:
         import record_selection as rs
         selection = bundle.get('selection', {})
         if not isinstance(selection, dict) or selection.get('method') not in rs.POLICIES:
@@ -382,7 +383,7 @@ def validate_bundle(bundle):
                     raise InputError('Recent context references do not cover the latest selected survey timestamp')
             elif refs:
                 raise InputError('Unselected recent context cannot claim selected references')
-    if bundle['skill_version'] in ('2027.0.0-alpha.10', VERSION) or 'source_map' in bundle:
+    if bundle['skill_version'] in ('2027.0.0-alpha.10', *CONTEXT_BUNDLE_VERSIONS) or 'source_map' in bundle:
         import source_registry as sr
         if bundle.get('source_map') != sr.record_map(evidence):
             raise InputError('Source map does not match selected source records')

@@ -184,6 +184,31 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(au.InputError):
             au.render_prompt(bundle)
 
+    def test_alpha11_conflicting_score_summary_remains_readable_after_version_bump(self):
+        data = self.read_rich()
+        data['L2_attitude']['nps_history'].append({
+            'date':'2025-09-25 10:00:00','industry':'domestic_hotel','score':0,'tags':['合成并列评分']})
+        self.save_rich(data)
+        bundle = self.bundle()
+        bundle['skill_version'] = '2027.0.0-alpha.11'
+        bundle['bundle_sha256'] = au.bundle_digest(bundle)
+        self.assertIsNone(bundle['derived_summary']['latest_score'])
+        self.assertEqual(au.validate_bundle(bundle), bundle)
+
+    def test_alpha11_source_map_cannot_be_removed_with_a_new_checksum(self):
+        bundle = self.bundle()
+        bundle['skill_version'] = '2027.0.0-alpha.11'
+        del bundle['source_map']
+        bundle['bundle_sha256'] = au.bundle_digest(bundle)
+        with self.assertRaises(au.InputError): au.validate_bundle(bundle)
+
+    def test_alpha11_selection_budget_stays_enforced_after_version_bump(self):
+        bundle = self.bundle()
+        bundle['skill_version'] = '2027.0.0-alpha.11'
+        bundle['selection']['max_records'] = 0
+        bundle['bundle_sha256'] = au.bundle_digest(bundle)
+        with self.assertRaises(au.InputError): au.validate_bundle(bundle)
+
     def test_rehashed_cutoff_violation_still_fails(self):
         bundle = self.bundle()
         bundle["evidence"][0]["date"] = "2027-01-01T00:00:00+08:00"
